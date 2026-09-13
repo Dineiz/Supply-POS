@@ -410,18 +410,28 @@ export default function CounterPage() {
               const minStock = item.minStockQty ? Number(item.minStockQty) : null;
               const isOut = stock <= 0;
               const isLow = !isOut && minStock !== null && stock <= minStock;
+              const cartQty = lines.find((l) => l.itemId === item.id)?.qty ?? 0;
+              const inCart = cartQty > 0;
               return (
                 <button
                   key={item.id}
                   onClick={() => addItem(item)}
-                  className={`flex flex-col items-start rounded-lg border-2 p-3.5 text-left transition-all duration-100 active:scale-[0.96] ${
+                  disabled={isOut}
+                  className={`relative flex flex-col items-start rounded-lg border-2 p-3.5 text-left transition-all duration-100 active:scale-[0.96] disabled:cursor-not-allowed ${
                     isOut
-                      ? "border-border bg-surface opacity-60 active:bg-border"
-                      : isLow
-                        ? "border-warning-surface bg-warning-surface hover:border-warning active:border-warning"
-                        : "border-border bg-paper hover:border-accent active:border-accent active:bg-surface-hover"
+                      ? "border-border bg-surface opacity-60"
+                      : inCart
+                        ? "border-accent bg-accent/5 active:bg-accent/10"
+                        : isLow
+                          ? "border-warning-surface bg-warning-surface hover:border-warning active:border-warning"
+                          : "border-border bg-paper hover:border-accent active:border-accent active:bg-surface-hover"
                   }`}
                 >
+                  {inCart && (
+                    <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1 text-xs font-bold text-accent-foreground shadow-sm">
+                      {cartQty}
+                    </span>
+                  )}
                   <p className="text-base font-semibold leading-snug text-ink">{item.name}</p>
                   <p className="font-tabular mt-1.5 text-sm font-medium text-ink-muted">
                     {formatMoney(item.price)}/{item.unitCode.toLowerCase()}
@@ -450,12 +460,16 @@ export default function CounterPage() {
 
       <button
         onClick={() => setCartOpen(true)}
-        className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-between bg-ink px-4 py-3 text-white md:hidden"
+        className="fixed inset-x-3 z-20 flex items-center justify-between rounded-2xl bg-ink px-5 py-3.5 text-white shadow-lg transition-transform active:scale-[0.98] md:hidden"
+        style={{ bottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
       >
         <span className="text-sm font-medium">
           {lines.length === 0 ? "Order" : `${lines.length} item${lines.length > 1 ? "s" : ""}`}
         </span>
-        <span className="font-tabular text-sm font-semibold">{formatMoney(total)} ▲</span>
+        <span className="font-tabular flex items-center gap-1.5 text-sm font-semibold">
+          {formatMoney(total)}
+          <span className="text-white/70">▲</span>
+        </span>
       </button>
 
       {cartOpen && (
