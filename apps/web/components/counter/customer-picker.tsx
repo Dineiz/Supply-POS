@@ -38,8 +38,6 @@ export function CustomerPicker({
       <ul className="divide-y divide-border">
         {filtered.map((c) => {
           const balance = Number(c.currentBalance);
-          const limit = Number(c.creditLimit);
-          const utilization = limit > 0 ? (balance / limit) * 100 : 0;
           return (
             <li key={c.id}>
               <button
@@ -48,22 +46,8 @@ export function CustomerPicker({
               >
                 <div>
                   <p className="text-sm font-medium text-ink">{c.name}</p>
-                  <p className="font-tabular text-xs text-ink-muted">
-                    Owes {formatMoney(balance)}
-                    {limit > 0 && ` · ${Math.round(utilization)}% of limit`}
-                  </p>
+                  <p className="font-tabular text-xs text-ink-muted">Owes {formatMoney(balance)}</p>
                 </div>
-                {limit > 0 && utilization >= 80 && (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      utilization >= 100
-                        ? "bg-danger-surface text-danger"
-                        : "bg-warning-surface text-warning"
-                    }`}
-                  >
-                    {utilization >= 100 ? "Over limit" : "Near limit"}
-                  </span>
-                )}
               </button>
             </li>
           );

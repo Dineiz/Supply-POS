@@ -211,11 +211,6 @@ model Unit {
   name String
   type UnitType
 
-  baseUnitId   String?
-  baseUnit     Unit?   @relation("UnitToBase", fields: [baseUnitId], references: [id])
-  derivedUnits Unit[]  @relation("UnitToBase")
-  factorToBase Decimal @default(1) @db.Decimal(14, 6)
-
   createdAt DateTime @default(now())
 
   itemsAsPurchaseUnit Item[] @relation("ItemPurchaseUnit")

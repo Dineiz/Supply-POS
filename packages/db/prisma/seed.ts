@@ -172,29 +172,31 @@ async function main() {
   });
 
   // --- Units ---
+  // Each unit stands on its own — how a "Bag (20kg)" relates to "Kilogram" is
+  // recorded once, per item, via purchaseToSellFactor below (not here).
   const kg = await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "KG", name: "Kilogram", type: "WEIGHT", factorToBase: 1 },
+    data: { warehouseId: warehouse.id, code: "KG", name: "Kilogram", type: "WEIGHT" },
   });
   await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "G", name: "Gram", type: "WEIGHT", baseUnitId: kg.id, factorToBase: 0.001 },
+    data: { warehouseId: warehouse.id, code: "G", name: "Gram", type: "WEIGHT" },
   });
   const bag50 = await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "BAG50", name: "Bag (50kg)", type: "WEIGHT", baseUnitId: kg.id, factorToBase: 50 },
+    data: { warehouseId: warehouse.id, code: "BAG50", name: "Bag (50kg)", type: "WEIGHT" },
   });
   const bag25 = await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "BAG25", name: "Bag (25kg)", type: "WEIGHT", baseUnitId: kg.id, factorToBase: 25 },
+    data: { warehouseId: warehouse.id, code: "BAG25", name: "Bag (25kg)", type: "WEIGHT" },
   });
   const bag20 = await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "BAG20", name: "Bag (20kg)", type: "WEIGHT", baseUnitId: kg.id, factorToBase: 20 },
+    data: { warehouseId: warehouse.id, code: "BAG20", name: "Bag (20kg)", type: "WEIGHT" },
   });
   const l = await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "L", name: "Litre", type: "VOLUME", factorToBase: 1 },
+    data: { warehouseId: warehouse.id, code: "L", name: "Litre", type: "VOLUME" },
   });
   const bottle5l = await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "BTL5L", name: "Bottle (5L)", type: "VOLUME", baseUnitId: l.id, factorToBase: 5 },
+    data: { warehouseId: warehouse.id, code: "BTL5L", name: "Bottle (5L)", type: "VOLUME" },
   });
   await prisma.unit.create({
-    data: { warehouseId: warehouse.id, code: "PCS", name: "Piece", type: "COUNT", factorToBase: 1 },
+    data: { warehouseId: warehouse.id, code: "PCS", name: "Piece", type: "COUNT" },
   });
 
   // --- Categories ---

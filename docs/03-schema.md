@@ -32,9 +32,13 @@ email at all.
 
 ## Unit
 
-Self-referencing (`baseUnitId` → another `Unit`) so a purchase unit (BAG) can
-declare `factorToBase` = 50 against its base unit (KG). This is what backs
-`item.purchaseToSellFactor` — see **Item** below.
+Just `code`, `name`, `type` — no conversion between units. A unit like "Bag
+(20kg)" is defined once, standing on its own; how it relates to "Kilogram" is
+recorded a single time, per item, via `item.purchaseToSellFactor` (see
+**Item** below). An earlier version had units declare a `factorToBase`
+against a `baseUnitId`, but nothing ever read it — `purchaseToSellFactor` was
+always the actual, used conversion — so it was pure duplicate data entry and
+was removed (migration `20260913205508_remove_unit_conversion_fields`).
 
 ## Category
 

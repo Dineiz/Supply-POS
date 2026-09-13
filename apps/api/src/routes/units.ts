@@ -9,24 +9,18 @@ const UNIT_SELECT = {
   code: true,
   name: true,
   type: true,
-  baseUnitId: true,
-  factorToBase: true,
 } satisfies Prisma.UnitSelect;
 
 interface CreateUnitBody {
   code: string;
   name: string;
   type: UnitType;
-  baseUnitId?: string;
-  factorToBase?: number;
 }
 
 interface UpdateUnitBody {
   code?: string;
   name?: string;
   type?: UnitType;
-  baseUnitId?: string | null;
-  factorToBase?: number;
 }
 
 const CATEGORY_SELECT = {
@@ -82,11 +76,6 @@ export default async function unitRoutes(app: FastifyInstance) {
       }
       const warehouseId = request.user.warehouseId;
 
-      if (body.baseUnitId) {
-        const base = await prisma.unit.findFirst({ where: { id: body.baseUnitId, warehouseId } });
-        if (!base) return reply.code(404).send({ message: "Base unit not found." });
-      }
-
       try {
         const unit = await prisma.unit.create({
           data: {
@@ -94,8 +83,6 @@ export default async function unitRoutes(app: FastifyInstance) {
             code: body.code,
             name: body.name,
             type: body.type,
-            baseUnitId: body.baseUnitId,
-            factorToBase: body.baseUnitId ? (body.factorToBase ?? 1) : 1,
           },
           select: UNIT_SELECT,
         });
@@ -128,13 +115,6 @@ export default async function unitRoutes(app: FastifyInstance) {
       if (!existing) return reply.code(404).send({ message: "Unit not found." });
 
       const body = request.body ?? {};
-      if (body.baseUnitId === existing.id) {
-        return reply.code(400).send({ message: "A unit cannot be its own base unit." });
-      }
-      if (body.baseUnitId) {
-        const base = await prisma.unit.findFirst({ where: { id: body.baseUnitId, warehouseId } });
-        if (!base) return reply.code(404).send({ message: "Base unit not found." });
-      }
 
       try {
         const updated = await prisma.unit.update({
@@ -143,8 +123,6 @@ export default async function unitRoutes(app: FastifyInstance) {
             code: body.code,
             name: body.name,
             type: body.type,
-            baseUnitId: body.baseUnitId,
-            factorToBase: body.factorToBase,
           },
           select: UNIT_SELECT,
         });
@@ -177,15 +155,11 @@ export default async function unitRoutes(app: FastifyInstance) {
       const existing = await prisma.unit.findFirst({ where: { id: request.params.id, warehouseId } });
       if (!existing) return reply.code(404).send({ message: "Unit not found." });
 
-      const [itemCount, derivedCount] = await Promise.all([
-        prisma.item.count({ where: { OR: [{ purchaseUnitId: existing.id }, { sellUnitId: existing.id }] } }),
-        prisma.unit.count({ where: { baseUnitId: existing.id } }),
-      ]);
+      const itemCount = await prisma.item.count({
+        where: { OR: [{ purchaseUnitId: existing.id }, { sellUnitId: existing.id }] },
+      });
       if (itemCount > 0) {
         return reply.code(409).send({ message: `${itemCount} item(s) use this unit. Reassign them first.` });
-      }
-      if (derivedCount > 0) {
-        return reply.code(409).send({ message: `${derivedCount} other unit(s) use this as their base unit.` });
       }
 
       await prisma.unit.delete({ where: { id: existing.id } });

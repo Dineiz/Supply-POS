@@ -12,8 +12,6 @@ export interface Unit {
   code: string;
   name: string;
   type: "WEIGHT" | "VOLUME" | "COUNT";
-  baseUnitId: string | null;
-  factorToBase: string;
 }
 
 export interface UnitRef {

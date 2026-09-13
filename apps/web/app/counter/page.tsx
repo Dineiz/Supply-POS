@@ -30,7 +30,6 @@ function openPrintTab(issueId: string) {
 
 interface BlockInfo {
   message: string;
-  overCredit: boolean;
   shortItems: { itemId: string; name: string }[];
 }
 
@@ -100,8 +99,6 @@ export default function CounterPage() {
   const total = subtotal - customerDiscount;
   const previousBalance = customer ? Number(customer.currentBalance) : 0;
   const newBalance = previousBalance + total;
-  const creditLimit = customer ? Number(customer.creditLimit) : 0;
-  const utilization = creditLimit > 0 ? (newBalance / creditLimit) * 100 : 0;
 
   function handleLogout() {
     clearSession();
@@ -139,10 +136,10 @@ export default function CounterPage() {
       await refreshCatalogue();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        const body = err.body as { message: string; overCredit: boolean; shortItems: BlockInfo["shortItems"] };
+        const body = err.body as { message: string; shortItems: BlockInfo["shortItems"] };
         setBlock(body);
       } else {
-        setBlock({ message: "Could not save this order. Try again.", overCredit: false, shortItems: [] });
+        setBlock({ message: "Could not save this order. Try again.", shortItems: [] });
       }
     } finally {
       setSubmitting(false);
@@ -226,12 +223,6 @@ export default function CounterPage() {
             <span>New balance</span>
             <span className="font-tabular">{formatMoney(newBalance)}</span>
           </div>
-          {creditLimit > 0 && utilization >= 80 && (
-            <p className={utilization >= 100 ? "text-danger" : "text-warning"}>
-              {utilization >= 100 ? "Over credit limit" : "Approaching credit limit"} (
-              {Math.round(utilization)}%)
-            </p>
-          )}
         </div>
       )}
 

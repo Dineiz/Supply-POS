@@ -146,7 +146,7 @@ present.
 
 Full CRUD, requires auth **and** `OWNER`/`MANAGER` for the mutating verbs
 (`GET` is any role — both lists still back the item form's dropdowns).
-`Unit`: `{ id, code, name, type, baseUnitId, factorToBase }`. `Category`:
+`Unit`: `{ id, code, name, type }`. `Category`:
 `{ id, name, colorHex, isPerishable, defaultReturnWindowHours }`. Both live in
 [`apps/api/src/routes/units.ts`](../apps/api/src/routes/units.ts) (categories
 included in the same file). Presented at `/setup/units` and
