@@ -15,7 +15,6 @@ const CUSTOMER_SELECT = {
   whatsapp: true,
   address: true,
   currentBalance: true,
-  creditLimit: true,
   creditDays: true,
   discountPercent: true,
   isActive: true,
@@ -33,7 +32,6 @@ interface CreateCustomerBody {
   phone?: string;
   whatsapp?: string;
   address?: string;
-  creditLimit?: number;
   creditDays?: number;
   discountPercent?: number;
   notes?: string;
@@ -49,7 +47,6 @@ interface UpdateCustomerBody {
   phone?: string | null;
   whatsapp?: string | null;
   address?: string | null;
-  creditLimit?: number;
   creditDays?: number;
   discountPercent?: number;
   notes?: string | null;
