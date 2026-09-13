@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { authFetch, ApiError } from "@/lib/api";
 import { getSessionUser } from "@/lib/session";
 import type { WarehouseSettings } from "@/lib/types";
@@ -13,6 +14,7 @@ export default function SettingsPage() {
   const [wastageApprovalThreshold, setWastageApprovalThreshold] = useState("");
   const [countVarianceApprovalThreshold, setCountVarianceApprovalThreshold] = useState("");
   const [periodLockedBefore, setPeriodLockedBefore] = useState("");
+  const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export default function SettingsPage() {
         setWastageApprovalThreshold(w.wastageApprovalThreshold);
         setCountVarianceApprovalThreshold(w.countVarianceApprovalThreshold);
         setPeriodLockedBefore(w.periodLockedBefore ? w.periodLockedBefore.slice(0, 10) : "");
+        setPrintMultipleTickets(w.printMultipleTickets);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."))
       .finally(() => setLoading(false));
@@ -46,6 +49,7 @@ export default function SettingsPage() {
           wastageApprovalThreshold: Number(wastageApprovalThreshold),
           countVarianceApprovalThreshold: Number(countVarianceApprovalThreshold),
           periodLockedBefore: periodLockedBefore || null,
+          printMultipleTickets,
         }),
       });
       setSaved(true);
@@ -108,6 +112,24 @@ export default function SettingsPage() {
         <div className="w-56">
           <label className="mb-1 block text-xs font-medium text-ink-muted">Lock payments dated before</label>
           <Input type="date" value={periodLockedBefore} onChange={(e) => setPeriodLockedBefore(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="space-y-4 border-t border-border pt-6">
+        <h2 className="text-sm font-semibold text-ink">Printing</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Print a separate ticket per item</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              The warehouse ticket splits into one ticket per item — for example, 5 kg Sugar and 1 kg Salt print as
+              two separate tickets instead of one. The customer&apos;s bill is not affected.
+            </p>
+          </div>
+          <Switch
+            checked={printMultipleTickets}
+            onChange={setPrintMultipleTickets}
+            label="Print a separate ticket per item"
+          />
         </div>
       </div>
 

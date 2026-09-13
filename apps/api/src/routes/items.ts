@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { Prisma, prisma } from "@dineiz-supply/db";
+import { Decimal } from "@dineiz-supply/logic";
 import { logAudit } from "../lib/audit.js";
 
 const ITEM_LIST_SELECT = {
@@ -24,8 +25,8 @@ const ITEM_LIST_SELECT = {
   imageUrl: true,
   location: true,
   category: { select: { id: true, name: true, colorHex: true } },
-  purchaseUnit: { select: { id: true, code: true, name: true } },
-  sellUnit: { select: { id: true, code: true, name: true } },
+  purchaseUnit: { select: { id: true, code: true, name: true, type: true } },
+  sellUnit: { select: { id: true, code: true, name: true, type: true } },
   purchaseToSellFactor: true,
   preferredSupplierId: true,
 } satisfies Prisma.ItemSelect;
@@ -81,8 +82,12 @@ interface CreateItemBody {
   sortOrder?: number;
   imageUrl?: string;
   location?: string;
-  openingQty?: number;
-  openingCost?: number;
+  /** How many full purchase units (e.g. bags) are on hand right now. */
+  openingQtyPurchaseUnit?: number;
+  /** Any extra loose amount on hand, already in sell-unit terms (e.g. an opened bag's leftover kg). */
+  openingExtraQty?: number;
+  /** What was paid per purchase unit (e.g. per bag) -- converted to a per-sell-unit cost below. */
+  openingUnitCostPurchaseUnit?: number;
 }
 
 interface UpdateItemBody {
@@ -146,8 +151,19 @@ export default async function itemRoutes(app: FastifyInstance) {
       }
 
       const warehouseId = request.user.warehouseId;
-      const openingQty = body.openingQty ?? 0;
-      const openingCost = body.openingCost ?? 0;
+      const factor = new Decimal(body.purchaseToSellFactor ?? 1);
+
+      // Opening stock is entered the way a shopkeeper actually counts it --
+      // full purchase units (bags/sacks) they have on hand, plus any loose
+      // leftover already in sell-unit terms (e.g. an opened bag) -- not a
+      // single ambiguous "quantity" the caller has to pre-convert themselves.
+      // Mirrors the exact conversion goods-receipts.ts uses for the same
+      // factor, so a receipt and an opening balance never disagree on math.
+      const qtyFromPurchaseUnits = new Decimal(body.openingQtyPurchaseUnit ?? 0).times(factor);
+      const extraQty = new Decimal(body.openingExtraQty ?? 0);
+      const openingQty = qtyFromPurchaseUnits.plus(extraQty);
+      const unitCostPurchaseUnit = new Decimal(body.openingUnitCostPurchaseUnit ?? 0);
+      const openingCost = factor.gt(0) ? unitCostPurchaseUnit.dividedBy(factor) : unitCostPurchaseUnit;
 
       try {
         const item = await prisma.$transaction(async (tx) => {
@@ -174,25 +190,25 @@ export default async function itemRoutes(app: FastifyInstance) {
               sortOrder: body.sortOrder ?? 0,
               imageUrl: body.imageUrl,
               location: body.location,
-              currentStockQty: openingQty,
-              avgCostPerUnit: openingCost,
+              currentStockQty: openingQty.toFixed(4),
+              avgCostPerUnit: openingCost.toFixed(4),
             },
             select: ITEM_LIST_SELECT,
           });
 
-          if (openingQty > 0) {
+          if (openingQty.gt(0)) {
             await tx.stockMovement.create({
               data: {
                 warehouseId,
                 itemId: created.id,
                 type: "OPENING",
-                qty: openingQty,
+                qty: openingQty.toFixed(4),
                 qtyBefore: 0,
-                qtyAfter: openingQty,
-                unitCost: openingCost,
-                totalCost: openingQty * openingCost,
+                qtyAfter: openingQty.toFixed(4),
+                unitCost: openingCost.toFixed(4),
+                totalCost: openingQty.times(openingCost).toFixed(2),
                 avgCostBefore: 0,
-                avgCostAfter: openingCost,
+                avgCostAfter: openingCost.toFixed(4),
                 performedById: request.user.sub,
                 performedByName: request.user.name,
                 reason: "Opening stock",

@@ -69,8 +69,23 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
         </button>
       </div>
       <DeliveryNote data={data} printCount={printCount} />
-      <div style={{ height: "8mm" }} />
-      <PickingSlip data={data} />
+      {data.warehouse.printMultipleTickets ? (
+        data.issue.lines.map((line, i) => (
+          <div key={line.id}>
+            <div style={{ height: "8mm" }} />
+            <PickingSlip
+              data={data}
+              lines={[line]}
+              ticketLabel={`TICKET ${i + 1} OF ${data.issue.lines.length}`}
+            />
+          </div>
+        ))
+      ) : (
+        <>
+          <div style={{ height: "8mm" }} />
+          <PickingSlip data={data} />
+        </>
+      )}
     </div>
   );
 }

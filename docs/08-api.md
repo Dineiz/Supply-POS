@@ -163,8 +163,17 @@ endpoints' rows.
 
 Requires auth **and** `OWNER` or `MANAGER` role (`403` otherwise — verified
 with a clerk token). `POST` body requires `name`, `purchaseUnitId`,
-`sellUnitId`, `baseSellPrice`; optional `openingQty`/`openingCost` create an
-`OPENING` `StockMovement` in the same transaction. `location` (added in
+`sellUnitId`, `baseSellPrice`. Opening stock is entered the way it's
+actually counted — `openingQtyPurchaseUnit` (full bags/sacks on hand),
+`openingExtraQty` (any loose leftover, already in sell-unit terms), and
+`openingUnitCostPurchaseUnit` (what was paid per bag) — then converted with
+the same `qty × factor` / `cost ÷ factor` math `goods-receipts.ts` uses, so
+an opening balance and a real receipt never disagree. **Real bug found and
+fixed**: the original version took a single flat `openingQty`/`openingCost`
+and stored it verbatim with no unit conversion at all — buying "5 bags" of a
+50kg-bag item landed as 5kg of stock, not 250kg. An `OPENING` `StockMovement`
+is created in the same transaction when the resulting quantity is positive.
+`location` (added in
 Phase 5, for the printed picking slip's rack guidance) is a free-text
 optional field on both `POST` and `PATCH`. `reorderDays` (added in Phase 8,
 for the Reorder Suggestions report) is an optional integer on both — `null`

@@ -16,7 +16,7 @@ local Postgres), `packages/logic` (9 pure functions, 34 passing tests),
 | Rate limiting on login | **Done** — 10/min on `/auth/login`, 100/min elsewhere |
 | Items CRUD | **Done** — list ([apps/web/app/(dashboard)/items/page.tsx](<../apps/web/app/(dashboard)/items/page.tsx>)), create/edit form ([apps/web/components/items/item-form.tsx](../apps/web/components/items/item-form.tsx)), `GET/POST/PATCH/DELETE /items`. Verified in-browser: created an item, edited Sugar's price (160→165, margin recalculated to 12.4% correctly, reverted), soft-deleted a test item |
 | Customers CRUD | **Done** — same pattern, [apps/web/app/(dashboard)/customers/page.tsx](<../apps/web/app/(dashboard)/customers/page.tsx>) + [customer-form.tsx](../apps/web/components/customers/customer-form.tsx). Verified in-browser: created "New Town Diner" with a 15,000 credit limit, appeared correctly in the list, deactivated it afterward |
-| Opening stock / opening balance on create | **Done** — `POST /items` with `openingQty`/`openingCost` writes an `OPENING` `StockMovement` in the same transaction; `POST /customers` with `openingBalance` writes an `OPENING_BALANCE` `CustomerLedger` row. Both verified against Postgres directly, not just the API response |
+| Opening stock / opening balance on create | **Done, later fixed** — see the opening-stock unit-conversion bug below; `POST /customers` with `openingBalance` writes an `OPENING_BALANCE` `CustomerLedger` row, verified against Postgres directly |
 | Units can't be changed after an item exists | **Deliberate, done** — `purchaseUnitId`/`sellUnitId`/`purchaseToSellFactor` are edit-disabled in the UI and excluded from the `PATCH /items/:id` payload entirely (changing them would silently reinterpret existing stock quantity). To fix a wrong unit: deactivate and recreate |
 | Role gating | **Done** — `requireRole("OWNER","MANAGER")` guards every write endpoint (verified: clerk token gets 403 creating an item); the dashboard layout redirects CLERK/VIEWER to `/counter` on mount |
 | Hard delete vs. deactivate | Only "Deactivate/Reactivate" (`isActive` toggle) is exposed in the UI — reversible, shows up under "Show inactive". The harder `DELETE` (which also sets `isDeleted`, hiding it even from "Show inactive") exists and is tested at the API level but has no UI button yet, matching the spec's own instinct that deletion should be a separate, more deliberate action (Part 12: "Deleting an item: type the name to confirm") |
@@ -419,6 +419,51 @@ updated to match. `Customer.creditLimit` was dropped from the schema via
 migration `20260913222033_remove_customer_credit_limit`. `creditDays`
 (payment terms, used only for aging buckets) is untouched — that's a
 separate concept and was never part of this request.
+
+## Opening-stock unit conversion — real bug found and fixed
+
+Reported symptom: creating an item bought in "Bori" (a 50kg bag) and sold in
+kg, entering 5 as the opening quantity, produced 5kg of stock, not 250kg —
+and average cost came out 0 even after entering a cost.
+
+Root cause: `POST /items`' opening-stock handling took a single flat
+`openingQty`/`openingCost` from the form and wrote it straight into
+`currentStockQty`/`avgCostPerUnit` with **no unit conversion at all** —
+unlike `goods-receipts.ts`, which has always correctly converted
+`qtyInPurchaseUnit × factor → qtyInSellUnit` and
+`unitCostPurchaseUnit ÷ factor → unitCostSellUnit`. The item-creation form
+asked for a bare "Quantity" with no unit shown, so there was no way to
+express "5 bags" correctly even if the backend had converted it.
+
+Fixed by mirroring `goods-receipts.ts`'s exact conversion, and reshaping the
+"Starting stock" section of [item-form.tsx](../apps/web/components/items/item-form.tsx)
+to match how someone actually counts stock:
+- **Full `<purchase unit>` you have** (e.g. "Full BAG50 you have") — multiplied
+  by the purchase→sell factor.
+- **Extra loose `<sell unit>`** (only shown when the purchase and sell units
+  actually differ) — for a partial amount that isn't a full bag, e.g. an
+  opened sack with 30kg left. Both add together into the total.
+- **Cost per `<purchase unit>`** — converted to a per-sell-unit average cost
+  the same way a receipt's cost is.
+- A live line — `= 280 kg @ PKR 3.40/kg · total cost PKR 952` — renders
+  under the inputs as they're typed, so the math is visible before saving,
+  not just trusted.
+
+Also fixed while in the area:
+- **"Selling price (per unit)" was ambiguous** — now reads "Selling price
+  (per kg)" (or whatever the chosen sell unit is), updating live as the sell
+  unit is changed.
+- **A fresh warehouse had zero units** — `create-account.ts` (the real,
+  non-demo provisioning script) now seeds Kilogram, Gram, Litre, Millilitre,
+  Piece, and Dozen for a brand-new warehouse, so Setup > Units isn't empty
+  on day one. The dev seed script (`seed.ts`) already had its own richer set
+  and was untouched.
+- **No quick way to add stock from the Items list** — the list page only
+  ever had "+ New item"; each row now has its own "+ Add stock" link
+  straight to Receiving with that item preselected (the item's own edit page
+  already had this; it just wasn't on the list).
+
+`pnpm typecheck` passes clean across the whole workspace.
 
 Verified: `pnpm typecheck` passes clean across the whole workspace; the
 Item form's own buy/sell conversion flow (a separate, unrelated fix earlier

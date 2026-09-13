@@ -1,14 +1,24 @@
 import { formatQtyOnly, formatDate, formatTime } from "@/lib/format";
-import type { PrintData } from "@/lib/types";
+import type { PrintData, PrintLine } from "@/lib/types";
 
-export function PickingSlip({ data }: { data: PrintData }) {
+export function PickingSlip({
+  data,
+  lines,
+  ticketLabel,
+}: {
+  data: PrintData;
+  lines?: PrintLine[];
+  ticketLabel?: string;
+}) {
   const { issue, customer, perishableGuidance } = data;
+  const displayLines = lines ?? issue.lines;
 
   return (
     <div className="receipt">
       <div className="center">
         <p className="bold">** PICKING SLIP **</p>
         <p>{issue.issueNumber}</p>
+        {ticketLabel && <p>{ticketLabel}</p>}
       </div>
       <hr className="rule-heavy" />
       <p className="bold">{customer.name.toUpperCase()}</p>
@@ -17,7 +27,7 @@ export function PickingSlip({ data }: { data: PrintData }) {
       </p>
       <hr className="rule-light" />
 
-      {issue.lines.map((line) => {
+      {displayLines.map((line) => {
         const guide = line.isPerishable ? perishableGuidance[line.itemId] : undefined;
         return (
           <div key={line.id} style={{ marginBottom: "3mm" }}>
@@ -42,7 +52,7 @@ export function PickingSlip({ data }: { data: PrintData }) {
       })}
 
       <hr className="rule-light" />
-      <p>TOTAL ITEMS: {issue.lines.length}</p>
+      <p>TOTAL ITEMS: {displayLines.length}</p>
 
       <p style={{ marginTop: "6mm" }}>Picked by : ____________</p>
       <p style={{ marginTop: "2mm" }}>Checked by: ____________</p>

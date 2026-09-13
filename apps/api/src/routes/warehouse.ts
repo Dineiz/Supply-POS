@@ -6,6 +6,7 @@ interface UpdateWarehouseBody {
   wastageApprovalThreshold?: number;
   countVarianceApprovalThreshold?: number;
   periodLockedBefore?: string | null;
+  printMultipleTickets?: boolean;
 }
 
 const SETTINGS_SELECT = {
@@ -14,6 +15,7 @@ const SETTINGS_SELECT = {
   wastageApprovalThreshold: true,
   countVarianceApprovalThreshold: true,
   periodLockedBefore: true,
+  printMultipleTickets: true,
 } as const;
 
 const LETTERHEAD_SELECT = {
@@ -23,6 +25,10 @@ const LETTERHEAD_SELECT = {
   ntn: true,
   logoUrl: true,
   currency: true,
+  // Not letterhead identity, but every print flow already fetches this
+  // endpoint and it needs to be readable by clerks (not just owner/manager)
+  // to decide the counter screen's button label before an order is placed.
+  printMultipleTickets: true,
 } as const;
 
 export default async function warehouseRoutes(app: FastifyInstance) {
@@ -70,6 +76,7 @@ export default async function warehouseRoutes(app: FastifyInstance) {
               : body.periodLockedBefore === null
                 ? null
                 : new Date(body.periodLockedBefore),
+          printMultipleTickets: body.printMultipleTickets,
         },
         select: SETTINGS_SELECT,
       });

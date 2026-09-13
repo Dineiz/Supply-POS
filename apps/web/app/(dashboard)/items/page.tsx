@@ -95,7 +95,7 @@ export default function ItemsPage() {
 
       <div className="overflow-hidden rounded-lg border border-border bg-paper">
         <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] text-sm">
+        <table className="w-full min-w-[920px] text-sm">
           <thead>
             <tr className="border-b border-border bg-surface text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
               <th className="px-4 py-3">Item</th>
@@ -105,19 +105,20 @@ export default function ItemsPage() {
               <th className="px-4 py-3 text-right">Price</th>
               <th className="px-4 py-3 text-right">Profit %</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-ink-muted">
+                <td colSpan={8} className="px-4 py-10 text-center text-ink-muted">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-ink-muted">
+                <td colSpan={8} className="px-4 py-10 text-center text-ink-muted">
                   No items match.
                 </td>
               </tr>
@@ -157,6 +158,14 @@ export default function ItemsPage() {
                     >
                       {item.isActive ? "Active" : "Inactive"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/receiving/new?itemId=${item.id}`}
+                      className="text-xs font-medium text-accent hover:text-accent-hover"
+                    >
+                      + Add stock
+                    </Link>
                   </td>
                 </tr>
               );

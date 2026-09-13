@@ -19,6 +19,11 @@ interface CounterState {
   clearCart: () => void;
 }
 
+/** Avoids floating-point drift (0.1 + 0.2 = 0.30000000000000004) after repeated +/- taps. */
+function round(qty: number): number {
+  return Math.round(qty * 100) / 100;
+}
+
 export const useCounterStore = create<CounterState>((set, get) => ({
   items: [],
   customers: [],
@@ -35,6 +40,7 @@ export const useCounterStore = create<CounterState>((set, get) => ({
       get().incrementLine(item.id);
       return;
     }
+    const fractional = item.sellUnit.type !== "COUNT";
     set({
       lines: [
         ...get().lines,
@@ -43,6 +49,8 @@ export const useCounterStore = create<CounterState>((set, get) => ({
           name: item.name,
           unitCode: item.unitCode,
           qty: 1,
+          step: fractional ? 0.5 : 1,
+          fractional,
           unitPrice: Number(item.price),
           avgCost: Number(item.avgCost),
           stockQty: Number(item.stockQty),
@@ -52,17 +60,18 @@ export const useCounterStore = create<CounterState>((set, get) => ({
   },
   incrementLine: (itemId) =>
     set({
-      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: l.qty + 1 } : l)),
+      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: round(l.qty + l.step) } : l)),
     }),
   decrementLine: (itemId) => {
     const line = get().lines.find((l) => l.itemId === itemId);
     if (!line) return;
-    if (line.qty <= 1) {
+    const next = round(line.qty - line.step);
+    if (next <= 0) {
       get().removeLine(itemId);
       return;
     }
     set({
-      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: l.qty - 1 } : l)),
+      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: next } : l)),
     });
   },
   setLineQty: (itemId, qty) => {
@@ -70,7 +79,7 @@ export const useCounterStore = create<CounterState>((set, get) => ({
       get().removeLine(itemId);
       return;
     }
-    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty } : l)) });
+    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: round(qty) } : l)) });
   },
   removeLine: (itemId) => set({ lines: get().lines.filter((l) => l.itemId !== itemId) }),
   clearCart: () => set({ lines: [], customerId: null }),

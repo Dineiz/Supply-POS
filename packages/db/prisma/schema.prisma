@@ -152,6 +152,12 @@ model Warehouse {
   // Null means nothing is locked yet.
   periodLockedBefore DateTime?
 
+  // When on, the warehouse ticket printed alongside a delivery splits into
+  // one ticket per line (e.g. 5kg Sugar and 1kg Salt print as two separate
+  // tickets) instead of one combined ticket. The customer's bill is never
+  // affected by this -- it only changes the warehouse-facing picking slip.
+  printMultipleTickets Boolean @default(false)
+
   issuePrefix   String @default("ISS")
   returnPrefix  String @default("RTN")
   paymentPrefix String @default("PAY")

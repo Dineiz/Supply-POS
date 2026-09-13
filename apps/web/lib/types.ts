@@ -18,6 +18,7 @@ export interface UnitRef {
   id: string;
   code: string;
   name: string;
+  type: "WEIGHT" | "VOLUME" | "COUNT";
 }
 
 export interface Item {
@@ -209,6 +210,7 @@ export interface PrintData {
     ntn: string | null;
     currency: string;
     defaultReturnWindowHours: number;
+    printMultipleTickets: boolean;
   };
   oldestUnpaid: { issueNumber: string; issuedAt: string } | null;
   perishableGuidance: Record<string, { receivedAt: string; batchNumber: string | null }>;
@@ -461,6 +463,7 @@ export interface WarehouseSettings {
   wastageApprovalThreshold: string;
   countVarianceApprovalThreshold: string;
   periodLockedBefore: string | null;
+  printMultipleTickets: boolean;
 }
 
 export interface ReconciliationMismatch {
@@ -566,6 +569,10 @@ export interface CartLine {
   name: string;
   unitCode: string;
   qty: number;
+  /** How much +/- moves qty by: 1 for count items, 0.5 for weight/volume. */
+  step: number;
+  /** Whether an exact quantity (like 1.5) can be typed in, not just stepped. */
+  fractional: boolean;
   unitPrice: number;
   avgCost: number;
   stockQty: number;

@@ -11,6 +11,7 @@ export interface WarehouseLetterhead {
   ntn: string | null;
   logoUrl: string | null;
   currency: string;
+  printMultipleTickets: boolean;
 }
 
 export function useLetterhead(): WarehouseLetterhead | null {

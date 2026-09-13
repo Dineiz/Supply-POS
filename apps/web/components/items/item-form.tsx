@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authFetch, ApiError } from "@/lib/api";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatQtyOnly } from "@/lib/format";
 import type { Category, Item, Unit } from "@/lib/types";
 
 interface ItemFormProps {
@@ -31,8 +31,9 @@ interface FormState {
   shelfLifeDays: string;
   returnWindowHours: string;
   location: string;
-  openingQty: string;
-  openingCost: string;
+  openingQtyPurchaseUnit: string;
+  openingExtraQty: string;
+  openingUnitCost: string;
 }
 
 const EMPTY: FormState = {
@@ -53,8 +54,9 @@ const EMPTY: FormState = {
   location: "",
   shelfLifeDays: "",
   returnWindowHours: "",
-  openingQty: "",
-  openingCost: "",
+  openingQtyPurchaseUnit: "",
+  openingExtraQty: "",
+  openingUnitCost: "",
 };
 
 export function ItemForm({ mode, itemId }: ItemFormProps) {
@@ -102,8 +104,9 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             location: item.location ?? "",
             shelfLifeDays: item.shelfLifeDays?.toString() ?? "",
             returnWindowHours: item.returnWindowHours?.toString() ?? "",
-            openingQty: "",
-            openingCost: "",
+            openingQtyPurchaseUnit: "",
+            openingExtraQty: "",
+            openingUnitCost: "",
           });
         } else if (mode === "create" && unitsRes.length > 0) {
           set("purchaseUnitId", unitsRes[0]!.id);
@@ -150,8 +153,9 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             purchaseUnitId: form.purchaseUnitId,
             sellUnitId: form.sellUnitId,
             purchaseToSellFactor: Number(form.purchaseToSellFactor),
-            openingQty: form.openingQty ? Number(form.openingQty) : undefined,
-            openingCost: form.openingCost ? Number(form.openingCost) : undefined,
+            openingQtyPurchaseUnit: form.openingQtyPurchaseUnit ? Number(form.openingQtyPurchaseUnit) : undefined,
+            openingExtraQty: form.openingExtraQty ? Number(form.openingExtraQty) : undefined,
+            openingUnitCostPurchaseUnit: form.openingUnitCost ? Number(form.openingUnitCost) : undefined,
           }),
         });
       } else {
@@ -185,6 +189,14 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
 
   const purchaseUnit = units.find((u) => u.id === form.purchaseUnitId);
   const sellUnit = units.find((u) => u.id === form.sellUnitId);
+
+  const hasConversion = !!(purchaseUnit && sellUnit && purchaseUnit.id !== sellUnit.id);
+  const openingFactor = Number(form.purchaseToSellFactor) || 1;
+  const openingQtyFromPurchaseUnits = (Number(form.openingQtyPurchaseUnit) || 0) * openingFactor;
+  const openingExtraQtyNum = Number(form.openingExtraQty) || 0;
+  const openingTotalQty = openingQtyFromPurchaseUnits + openingExtraQtyNum;
+  const openingUnitCostNum = Number(form.openingUnitCost) || 0;
+  const openingCostPerSellUnit = openingFactor > 0 ? openingUnitCostNum / openingFactor : openingUnitCostNum;
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-8 p-6 pb-16">
@@ -292,7 +304,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       </Section>
 
       <Section title="Pricing">
-        <Field label="Selling price (per unit)">
+        <Field label={`Selling price (per ${sellUnit?.code.toLowerCase() ?? "unit"})`}>
           <Input
             type="number"
             step="0.01"
@@ -314,27 +326,60 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       </Section>
 
       {mode === "create" && (
-        <Section title="Starting stock" hint="How much of this do you already have? Leave blank if none yet — you can add stock any time from Receiving.">
+        <Section
+          title="Starting stock"
+          hint="How much of this do you already have, and what did it cost? Leave blank if none yet — you can add stock any time from Receiving."
+        >
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Quantity" optional>
+            <Field
+              label={hasConversion ? `Full ${purchaseUnit!.code} you have` : `Quantity (${sellUnit?.code.toLowerCase() ?? "unit"})`}
+              optional
+            >
               <Input
                 type="number"
                 step="any"
                 min="0"
-                value={form.openingQty}
-                onChange={(e) => set("openingQty", e.target.value)}
+                value={form.openingQtyPurchaseUnit}
+                onChange={(e) => set("openingQtyPurchaseUnit", e.target.value)}
               />
             </Field>
-            <Field label="Cost per unit" optional>
+            <Field label={`Cost per ${purchaseUnit?.code.toLowerCase() ?? "unit"}`} optional>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
-                value={form.openingCost}
-                onChange={(e) => set("openingCost", e.target.value)}
+                value={form.openingUnitCost}
+                onChange={(e) => set("openingUnitCost", e.target.value)}
               />
             </Field>
           </div>
+          {hasConversion && (
+            <Field
+              label={`Extra loose ${sellUnit!.code.toLowerCase()}`}
+              optional
+              hint={`If you also have some not in a full ${purchaseUnit!.code} — e.g. an opened bag`}
+            >
+              <Input
+                type="number"
+                step="any"
+                min="0"
+                value={form.openingExtraQty}
+                onChange={(e) => set("openingExtraQty", e.target.value)}
+              />
+            </Field>
+          )}
+          {openingTotalQty > 0 && sellUnit && (
+            <p className="font-tabular rounded-md bg-surface px-3 py-2 text-sm text-ink-muted">
+              = {formatQtyOnly(openingTotalQty)} {sellUnit.code.toLowerCase()}
+              {openingUnitCostNum > 0 && (
+                <>
+                  {" "}
+                  @ {formatMoney(openingCostPerSellUnit)}/{sellUnit.code.toLowerCase()} · total cost{" "}
+                  {formatMoney(openingTotalQty * openingCostPerSellUnit)}
+                </>
+              )}
+            </p>
+          )}
         </Section>
       )}
 

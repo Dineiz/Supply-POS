@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authFetch, ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
+import type { ListResponse } from "@/lib/list-query";
 import type { Customer, IssueDetail, IssueSummary, Item, ReturnCondition } from "@/lib/types";
 
 interface ReturnLineForm {
@@ -43,8 +44,8 @@ export function ReturnModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    authFetch<IssueSummary[]>(`/issues?customerId=${customer.id}`)
-      .then(setRecentIssues)
+    authFetch<ListResponse<IssueSummary>>(`/issues?customerId=${customer.id}`)
+      .then((res) => setRecentIssues(res.rows))
       .catch(() => {});
   }, [customer.id]);
 

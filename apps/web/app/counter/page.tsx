@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { CustomerPicker } from "@/components/counter/customer-picker";
+import { QtyStepper } from "@/components/counter/qty-stepper";
 import { OverrideModal } from "@/components/shared/override-modal";
 import { PaymentModal } from "@/components/counter/payment-modal";
 import { ReturnModal } from "@/components/counter/return-modal";
@@ -54,8 +55,9 @@ export default function CounterPage() {
   const [printBlocked, setPrintBlocked] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
 
-  const { items, customers, catalogueLoaded, setCatalogue, customerId, setCustomerId, lines, addItem, incrementLine, decrementLine, removeLine, clearCart } =
+  const { items, customers, catalogueLoaded, setCatalogue, customerId, setCustomerId, lines, addItem, incrementLine, decrementLine, setLineQty, removeLine, clearCart } =
     useCounterStore();
 
   useEffect(() => {
@@ -66,8 +68,15 @@ export default function CounterPage() {
     }
     setUser(sessionUser);
 
-    Promise.all([authFetch<Item[]>("/items"), authFetch<import("@/lib/types").Customer[]>("/customers")])
-      .then(([itemsRes, customersRes]) => setCatalogue(itemsRes, customersRes))
+    Promise.all([
+      authFetch<Item[]>("/items"),
+      authFetch<import("@/lib/types").Customer[]>("/customers"),
+      authFetch<{ printMultipleTickets: boolean }>("/warehouse/letterhead"),
+    ])
+      .then(([itemsRes, customersRes, warehouseRes]) => {
+        setCatalogue(itemsRes, customersRes);
+        setPrintMultipleTickets(warehouseRes.printMultipleTickets);
+      })
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : "Could not reach the server."));
   }, [router, setCatalogue]);
 
@@ -159,31 +168,26 @@ export default function CounterPage() {
     <div className="flex-1 overflow-y-auto px-4 py-2">
       {lines.length === 0 && <p className="py-8 text-center text-sm text-ink-faint">No items yet</p>}
       {lines.map((line) => (
-        <div key={line.itemId} className="flex items-center justify-between border-b border-border py-3">
-          <div>
-            <p className="text-sm font-medium text-ink">{line.name}</p>
+        <div key={line.itemId} className="flex items-center justify-between gap-3 border-b border-border py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-ink">{line.name}</p>
             <p className="font-tabular text-xs text-ink-muted">
-              {line.qty} {line.unitCode.toLowerCase()} × {formatMoney(line.unitPrice)} ={" "}
-              {formatMoney(line.qty * line.unitPrice)}
+              {formatMoney(line.unitPrice)}/{line.unitCode.toLowerCase()} = {formatMoney(line.qty * line.unitPrice)}
             </p>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => decrementLine(line.itemId)}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-ink-muted hover:text-ink"
-            >
-              −
-            </button>
-            <span className="font-tabular w-5 text-center text-sm">{line.qty}</span>
-            <button
-              onClick={() => incrementLine(line.itemId)}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-ink-muted hover:text-ink"
-            >
-              +
-            </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <QtyStepper
+              qty={line.qty}
+              unitCode={line.unitCode}
+              fractional={line.fractional}
+              size="spacious"
+              onIncrement={() => incrementLine(line.itemId)}
+              onDecrement={() => decrementLine(line.itemId)}
+              onSetQty={(qty) => setLineQty(line.itemId, qty)}
+            />
             <button
               onClick={() => removeLine(line.itemId)}
-              className="ml-1 text-ink-faint hover:text-danger"
+              className="text-ink-faint hover:text-danger"
               aria-label="Remove"
             >
               ✕
@@ -282,7 +286,7 @@ export default function CounterPage() {
         disabled={!customer || lines.length === 0 || submitting}
         className="mt-3 w-full"
       >
-        {submitting ? "Sending…" : "Deliver & Print"}
+        {submitting ? "Sending…" : printMultipleTickets ? "Deliver & Print Multiple" : "Deliver & Print"}
       </Button>
       <div className="mt-2 grid grid-cols-3 gap-2">
         <Button
@@ -410,28 +414,31 @@ export default function CounterPage() {
               const minStock = item.minStockQty ? Number(item.minStockQty) : null;
               const isOut = stock <= 0;
               const isLow = !isOut && minStock !== null && stock <= minStock;
-              const cartQty = lines.find((l) => l.itemId === item.id)?.qty ?? 0;
-              const inCart = cartQty > 0;
+              const cartLine = lines.find((l) => l.itemId === item.id);
+              const inCart = !!cartLine;
               return (
-                <button
+                <div
                   key={item.id}
-                  onClick={() => addItem(item)}
-                  disabled={isOut}
-                  className={`relative flex flex-col items-start rounded-lg border-2 p-3.5 text-left transition-all duration-100 active:scale-[0.96] disabled:cursor-not-allowed ${
+                  role="button"
+                  tabIndex={isOut ? -1 : 0}
+                  aria-disabled={isOut}
+                  onClick={() => !isOut && addItem(item)}
+                  onKeyDown={(e) => {
+                    if (!isOut && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      addItem(item);
+                    }
+                  }}
+                  className={`flex flex-col items-start rounded-lg border-2 p-3.5 text-left transition-all duration-100 active:scale-[0.96] ${
                     isOut
-                      ? "border-border bg-surface opacity-60"
+                      ? "cursor-not-allowed border-border bg-surface opacity-60"
                       : inCart
-                        ? "border-accent bg-accent/5 active:bg-accent/10"
+                        ? "cursor-pointer border-accent bg-accent/5 active:bg-accent/10"
                         : isLow
-                          ? "border-warning-surface bg-warning-surface hover:border-warning active:border-warning"
-                          : "border-border bg-paper hover:border-accent active:border-accent active:bg-surface-hover"
+                          ? "cursor-pointer border-warning-surface bg-warning-surface hover:border-warning active:border-warning"
+                          : "cursor-pointer border-border bg-paper hover:border-accent active:border-accent active:bg-surface-hover"
                   }`}
                 >
-                  {inCart && (
-                    <span className="absolute -right-2 -top-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1 text-xs font-bold text-accent-foreground shadow-sm">
-                      {cartQty}
-                    </span>
-                  )}
                   <p className="text-base font-semibold leading-snug text-ink">{item.name}</p>
                   <p className="font-tabular mt-1.5 text-sm font-medium text-ink-muted">
                     {formatMoney(item.price)}/{item.unitCode.toLowerCase()}
@@ -443,7 +450,19 @@ export default function CounterPage() {
                   >
                     {isOut ? "Out of stock" : `${isLow ? "⚠ " : ""}${stock} ${item.unitCode.toLowerCase()}`}
                   </p>
-                </button>
+                  {cartLine && (
+                    <div className="mt-3">
+                      <QtyStepper
+                        qty={cartLine.qty}
+                        unitCode={cartLine.unitCode}
+                        fractional={cartLine.fractional}
+                        onIncrement={() => incrementLine(item.id)}
+                        onDecrement={() => decrementLine(item.id)}
+                        onSetQty={(qty) => setLineQty(item.id, qty)}
+                      />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
