@@ -9,15 +9,33 @@ async function main() {
   const role: UserRole = "OWNER";
   const name = process.env.USER_NAME || "Dineiz Admin";
   const pin = process.env.USER_PIN || "9999";
+  // Deliberately no fallback: this script has been run twice against the
+  // same production database for two different, unrelated businesses.
+  // `warehouse.findFirst()` with no filter silently reused whichever
+  // warehouse already existed -- the second run attached a brand-new
+  // login to someone else's real customers, items and transactions.
+  // Requiring an explicit, distinct name for every run makes that
+  // mistake structurally impossible instead of merely unlikely.
+  const warehouseName = process.env.WAREHOUSE_NAME;
+  if (!warehouseName) {
+    console.error(
+      "WAREHOUSE_NAME is required. Set it to a name unique to this business " +
+        "(e.g. \"Acme Traders\") -- never leave it unset, even for the very first " +
+        "warehouse. Existing warehouse names are safe to reuse on purpose (e.g. " +
+        "to add a second user to the same business); a new name always creates " +
+        "a brand-new, independent warehouse."
+    );
+    process.exit(1);
+  }
 
-  console.log(`Connecting to database and setting up account for ${email}...`);
+  console.log(`Connecting to database and setting up account for ${email} in warehouse "${warehouseName}"...`);
 
-  let warehouse = await prisma.warehouse.findFirst();
+  let warehouse = await prisma.warehouse.findFirst({ where: { name: warehouseName } });
   if (!warehouse) {
-    console.log("No warehouse found. Creating default warehouse 'Dineiz Supply Warehouse'...");
+    console.log(`No warehouse named "${warehouseName}" found. Creating it...`);
     warehouse = await prisma.warehouse.create({
       data: {
-        name: "Dineiz Supply Warehouse",
+        name: warehouseName,
         address: "Main Branch",
         currency: "PKR",
         timezone: "Asia/Karachi",

@@ -458,6 +458,42 @@ Also fixed while in the area:
   Piece, and Dozen for a brand-new warehouse, so Setup > Units isn't empty
   on day one. The dev seed script (`seed.ts`) already had its own richer set
   and was untouched.
+
+## Production incident: two tenants sharing one warehouse
+
+`create-account.ts` was run a second time in production, against a database
+that already had a real client's warehouse, to create a separate Dineiz
+admin login (`supply@dineiz.com`). Its `prisma.warehouse.findFirst()` had no
+filter, so it silently reused the client's existing warehouse instead of
+creating a new one -- the admin login was attached to the client's tenant.
+From that point every read and write from either account hit the exact same
+`warehouseId`, so admin actions (a customer, categories, units, several
+issues and payments, a completed stock count) landed in the client's real
+data instead of being isolated.
+
+No client data was lost or deleted to fix this -- confirmed via
+`AuditLog` (filtered by `actorId`) that everything attributed to the admin
+account was real, wanted work, not throwaway test data (one obvious test
+item aside, left for the owner to deactivate manually rather than deleted
+by script). The fix was additive only: a new warehouse, the admin `User`
+row's `warehouseId` repointed at it, and the client's units/categories/
+active items copied in as a starting catalogue (stock and average cost
+reset to 0, since the new warehouse has no physical stock of its own).
+Fixed at the source: `create-account.ts` now requires an explicit
+`WAREHOUSE_NAME` env var and looks up by that name instead of "whichever
+warehouse exists first," making this class of mistake structurally
+impossible rather than merely unlikely.
+
+Also raised while sorting this out: an item's own edit page only ever had a
+link out to `/receiving/new?itemId=...` for adding stock -- no way to do it
+without leaving the item. Added a `QuickAddStockModal`
+([apps/web/components/items/quick-add-stock-modal.tsx](../apps/web/components/items/quick-add-stock-modal.tsx))
+opened right from the item page's "+ Add stock" button; it calls the exact
+same `POST /goods-receipts` endpoint Receiving itself uses (same moving-
+average cost math, same >50%-above-average variance flag), not a second,
+parallel way of adding stock. Verified live: adding 2 BAG50 @ PKR 9,000 to
+an item at 83kg/PKR 205 avg landed on 183kg/PKR 191 avg, in place, with no
+navigation away from the item.
 - **No quick way to add stock from the Items list** — the list page only
   ever had "+ New item"; each row now has its own "+ Add stock" link
   straight to Receiving with that item preselected (the item's own edit page

@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { QuickAddStockModal } from "@/components/items/quick-add-stock-modal";
 import { authFetch, ApiError } from "@/lib/api";
 import { formatMoney, formatQtyOnly } from "@/lib/format";
-import type { Category, Item, Unit } from "@/lib/types";
+import type { Category, Item, Supplier, Unit } from "@/lib/types";
 
 interface ItemFormProps {
   mode: "create" | "edit";
@@ -63,11 +64,13 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
   const router = useRouter();
   const [units, setUnits] = useState<Unit[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [existing, setExisting] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddStock, setShowAddStock] = useState(false);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -76,12 +79,14 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
   useEffect(() => {
     async function load() {
       try {
-        const [unitsRes, categoriesRes] = await Promise.all([
+        const [unitsRes, categoriesRes, suppliersRes] = await Promise.all([
           authFetch<Unit[]>("/units"),
           authFetch<Category[]>("/categories"),
+          authFetch<Supplier[]>("/suppliers"),
         ]);
         setUnits(unitsRes);
         setCategories(categoriesRes);
+        setSuppliers(suppliersRes);
 
         if (mode === "edit" && itemId) {
           const item = await authFetch<Item>(`/items/${itemId}`);
@@ -185,6 +190,18 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     }
   }
 
+  async function handleStockAdded() {
+    setShowAddStock(false);
+    if (!itemId) return;
+    try {
+      const item = await authFetch<Item>(`/items/${itemId}`);
+      setExisting(item);
+    } catch {
+      // Non-fatal: the add-stock call already succeeded. The displayed
+      // stock/cost will just be stale until the page is next reloaded.
+    }
+  }
+
   if (loading) return <p className="p-6 text-sm text-ink-muted">Loading…</p>;
 
   const purchaseUnit = units.find((u) => u.id === form.purchaseUnitId);
@@ -199,6 +216,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
   const openingCostPerSellUnit = openingFactor > 0 ? openingUnitCostNum / openingFactor : openingUnitCostNum;
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-8 p-6 pb-16">
       <div>
         <h1 className="text-xl font-semibold text-ink">{mode === "create" ? "New item" : existing?.name}</h1>
@@ -208,9 +226,13 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
               Current stock: {existing.stockQty} {existing.unitCode.toLowerCase()} · Avg cost:{" "}
               {formatMoney(existing.avgCost)}/{existing.unitCode.toLowerCase()}
             </p>
-            <a href={`/receiving/new?itemId=${itemId}`} className="text-sm font-medium text-accent hover:underline">
+            <button
+              type="button"
+              onClick={() => setShowAddStock(true)}
+              className="text-sm font-medium text-accent hover:underline"
+            >
               + Add stock
-            </a>
+            </button>
           </div>
         )}
       </div>
@@ -469,6 +491,15 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         </div>
       </div>
     </form>
+    {showAddStock && existing && (
+      <QuickAddStockModal
+        item={existing}
+        suppliers={suppliers}
+        onClose={() => setShowAddStock(false)}
+        onSaved={handleStockAdded}
+      />
+    )}
+    </>
   );
 }
 
