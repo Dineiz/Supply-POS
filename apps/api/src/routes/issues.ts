@@ -139,7 +139,6 @@ export default async function issueRoutes(app: FastifyInstance) {
           nameUrdu: issue.customer.nameUrdu,
           code: issue.customer.code,
           phone: issue.customer.phone,
-          creditLimit: issue.customer.creditLimit,
           creditDays: issue.customer.creditDays,
         },
         warehouse: {
@@ -240,21 +239,16 @@ export default async function issueRoutes(app: FastifyInstance) {
 
       const shortItems = resolvedLines.filter((l) => new Decimal(l.item.currentStockQty).lt(l.qty));
       const balanceAfterIssue = new Decimal(customer.currentBalance).plus(totals.totalAmount);
-      const overCredit =
-        customer.creditLimit.greaterThan(0) && balanceAfterIssue.greaterThan(customer.creditLimit);
 
-      if ((shortItems.length > 0 || overCredit) && !body.override) {
+      if (shortItems.length > 0 && !body.override) {
         return reply.code(409).send({
-          message: overCredit ? "This is over their credit limit." : "Not enough stock for one or more items.",
+          message: "Not enough stock for one or more items.",
           shortItems: shortItems.map((l) => ({
             itemId: l.item.id,
             name: l.item.name,
             available: l.item.currentStockQty,
             requested: formatQty(l.qty),
           })),
-          overCredit,
-          balanceAfterIssue: balanceAfterIssue.toFixed(2),
-          creditLimit: customer.creditLimit.toFixed(2),
         });
       }
 

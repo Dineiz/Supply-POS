@@ -352,10 +352,7 @@ export default function CounterPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-ink">{customer.name}</p>
-              <p className="font-tabular text-xs text-ink-muted">
-                Owes: {formatMoney(customer.currentBalance)}
-                {creditLimit > 0 && ` · Limit ${formatMoney(creditLimit)} (${Math.round((previousBalance / creditLimit) * 100)}%)`}
-              </p>
+              <p className="font-tabular text-xs text-ink-muted">Owes: {formatMoney(customer.currentBalance)}</p>
             </div>
             <Button variant="secondary" onClick={() => setShowCustomerPicker(true)}>
               Change
