@@ -116,10 +116,7 @@ export default function SalesByCustomerPage() {
                       <td className="font-tabular px-4 py-3 text-right text-ink">{formatMoney(c.sales)}</td>
                       <td className="font-tabular px-4 py-3 text-right text-ink-muted">{formatMoney(c.returns)}</td>
                       <td className="font-tabular px-4 py-3 text-right text-ink">{formatMoney(c.net)}</td>
-                      <td className="font-tabular px-4 py-3 text-right text-ink-muted">
-                        {formatMoney(c.owes)}
-                        {c.overCreditLimit && <span className="ml-1 text-danger" title="Over credit limit">⚠</span>}
-                      </td>
+                      <td className="font-tabular px-4 py-3 text-right text-ink-muted">{formatMoney(c.owes)}</td>
                     </tr>
                   ))}
                 </tbody>

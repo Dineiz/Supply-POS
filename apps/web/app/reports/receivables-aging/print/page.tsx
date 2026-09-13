@@ -49,10 +49,7 @@ export default function PrintReceivablesAgingPage() {
           <tbody>
             {report.rows.map((r) => (
               <tr key={r.customerId}>
-                <td>
-                  {r.name}
-                  {r.overCreditLimit ? " ⚠" : ""}
-                </td>
+                <td>{r.name}</td>
                 <td className="num">{Number(r.current) > 0 ? formatMoneyPrecise(r.current) : "—"}</td>
                 <td className="num">{Number(r.d8_15) > 0 ? formatMoneyPrecise(r.d8_15) : "—"}</td>
                 <td className="num">{Number(r.d16_30) > 0 ? formatMoneyPrecise(r.d16_30) : "—"}</td>

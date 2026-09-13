@@ -58,10 +58,7 @@ function PrintSalesByCustomer() {
                 <td className="num">{formatMoneyPrecise(c.sales)}</td>
                 <td className="num">{formatMoneyPrecise(c.returns)}</td>
                 <td className="num">{formatMoneyPrecise(c.net)}</td>
-                <td className="num">
-                  {formatMoneyPrecise(c.owes)}
-                  {c.overCreditLimit ? " ⚠" : ""}
-                </td>
+                <td className="num">{formatMoneyPrecise(c.owes)}</td>
               </tr>
             ))}
           </tbody>
