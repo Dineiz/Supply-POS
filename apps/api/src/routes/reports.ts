@@ -301,7 +301,6 @@ export default async function reportRoutes(app: FastifyInstance) {
         id: true,
         name: true,
         phone: true,
-        creditLimit: true,
         creditDays: true,
         customerLedgers: {
           select: { id: true, entryDate: true, debit: true, credit: true },
@@ -353,7 +352,6 @@ export default async function reportRoutes(app: FastifyInstance) {
           d16_30: totalsByBucket.d16_30.toFixed(2),
           d30_plus: totalsByBucket.d30_plus.toFixed(2),
           total: total.toFixed(2),
-          overCreditLimit: new Decimal(customer.creditLimit).gt(0) && total.gt(customer.creditLimit),
         };
       })
       .filter((r) => Number(r.total) > 0)
@@ -379,7 +377,6 @@ export default async function reportRoutes(app: FastifyInstance) {
       totals: { ...totals, grandTotal: grandTotal.toFixed(2) },
       percentOfTotal,
       needsAttention,
-      overCreditLimit: rows.filter((r) => r.overCreditLimit),
     };
   });
 
@@ -616,9 +613,7 @@ export default async function reportRoutes(app: FastifyInstance) {
   // - RETURNS. OWES is the customer's live currentBalance (a snapshot, not
   // scoped to the period) -- the same figure Customer Statement and
   // Receivables Aging show, so the three reports never disagree on what a
-  // customer owes right now. overCreditLimit mirrors Receivables Aging's own
-  // flag exactly (same comparison, same fields) rather than inventing a
-  // second definition of "over limit."
+  // customer owes right now.
   app.get<{ Querystring: RangeQuery }>("/reports/sales-by-customer", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
     const { from, to } = parseDateRange(request.query);
@@ -640,7 +635,7 @@ export default async function reportRoutes(app: FastifyInstance) {
 
     const customers = await prisma.customer.findMany({
       where: { id: { in: issueRows.map((r) => r.customerId) } },
-      select: { id: true, name: true, currentBalance: true, creditLimit: true },
+      select: { id: true, name: true, currentBalance: true },
     });
     const customerById = new Map(customers.map((c) => [c.id, c]));
     const returnsByCustomer = new Map(returnRows.map((r) => [r.customerId, new Decimal(r._sum.totalCreditAmount ?? 0)]));
