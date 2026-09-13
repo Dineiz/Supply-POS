@@ -1,0 +1,347 @@
+@import "tailwindcss";
+
+/*
+ * Dineiz brand palette, pulled from the actual brand assets
+ * (Dineiz-assets/), not invented: the core wordmark is pure
+ * black-on-white / white-on-black, and #f3562c is the one accent
+ * color used across the Dineiz product family ("Dineiz Go").
+ */
+@theme {
+  --font-sans: -apple-system, "Segoe UI", ui-sans-serif, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  --color-ink: #0a0a0a;
+  --color-ink-muted: #6b6b6b;
+  --color-ink-faint: #a3a3a3;
+  --color-paper: #ffffff;
+  --color-surface: #fafaf9;
+  --color-surface-hover: #f2f1ef;
+  --color-border: #e7e5e3;
+  --color-border-strong: #d4d1cd;
+
+  --color-accent: #f3562c;
+  --color-accent-hover: #dd4a22;
+  --color-accent-foreground: #ffffff;
+
+  --color-success: #15803d;
+  --color-success-surface: #f0fdf4;
+  --color-warning: #b45309;
+  --color-warning-surface: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-surface: #fef2f2;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Printed documents (Delivery Note / Picking Slip), 80mm thermal ---- */
+
+.receipt {
+  width: 72mm;
+  margin: 0 auto;
+  padding: 3mm 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: #000;
+  background: #fff;
+}
+
+.receipt .rule-heavy {
+  border: none;
+  border-top: 2px solid #000;
+  margin: 2mm 0;
+}
+
+.receipt .rule-light {
+  border: none;
+  border-top: 1px dashed #000;
+  margin: 1.5mm 0;
+}
+
+.receipt .center {
+  text-align: center;
+}
+
+.receipt .bold {
+  font-weight: 700;
+}
+
+.receipt .kv-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+}
+
+.receipt .kv-row .label {
+  color: #000;
+}
+
+.receipt .kv-row .value {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.receipt .line-cols {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+}
+
+.receipt .line-cols .col-qty,
+.receipt .line-cols .col-rate,
+.receipt .line-cols .col-amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.receipt .col-qty {
+  flex: 1;
+}
+.receipt .col-rate,
+.receipt .col-amount {
+  min-width: 16mm;
+}
+
+.receipt .signatures {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8mm;
+}
+
+@media screen {
+  .receipt-preview {
+    background: var(--color-surface);
+    min-height: 100vh;
+    padding: 24px 0;
+  }
+  .receipt {
+    border: 1px solid var(--color-border-strong);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    padding: 6mm 4mm;
+  }
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  html,
+  body {
+    margin: 0;
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .receipt-preview {
+    padding: 0;
+    background: #fff;
+  }
+  .receipt {
+    box-shadow: none;
+    border: none;
+    padding: 3mm 4mm;
+    page-break-after: always;
+  }
+  .receipt:last-child {
+    page-break-after: auto;
+  }
+}
+
+/* ---- Printed reports, A4 portrait ----
+   Named page (`page: report`), not the bare 80mm `@page` above --
+   a report print route never shares a document with a receipt print
+   route, but naming it avoids the two rules fighting over the
+   default page if that ever changes. */
+@page report {
+  size: A4;
+  margin: 15mm;
+}
+
+.a4-report {
+  page: report;
+  width: 190mm;
+  margin: 0 auto;
+  padding: 10mm 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #000;
+  background: #fff;
+}
+
+.a4-report table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.a4-report th,
+.a4-report td {
+  text-align: left;
+  padding: 1.5mm 2mm;
+  white-space: nowrap;
+}
+
+.a4-report .num,
+.a4-report th.num,
+.a4-report td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.a4-report .rule-heavy {
+  border: none;
+  border-top: 1.5pt solid #000;
+  margin: 2mm 0;
+}
+
+.a4-report .rule-light {
+  border: none;
+  border-top: 0.5pt solid #000;
+  margin: 1.5mm 0;
+}
+
+.a4-report .rule-double {
+  border: none;
+  border-top: 1.5pt solid #000;
+  border-bottom: 1.5pt solid #000;
+  height: 3px;
+  margin: 2mm 0;
+}
+
+.a4-report .boxed {
+  border-top: 1.5pt solid #000;
+  border-bottom: 1.5pt solid #000;
+  padding: 2mm 0;
+  margin: 2mm 0;
+  font-weight: 700;
+}
+
+.a4-report .letterhead-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6mm;
+}
+
+.a4-report .letterhead-logo {
+  height: 11mm;
+  width: auto;
+}
+
+.a4-report .letterhead-brand {
+  display: flex;
+  gap: 3mm;
+  align-items: center;
+}
+
+.a4-report .letterhead-name {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.a4-report .letterhead-meta {
+  font-size: 9px;
+  color: #333;
+}
+
+.a4-report .letterhead-printed {
+  text-align: right;
+  font-size: 9px;
+  color: #333;
+  white-space: nowrap;
+}
+
+.a4-report .letterhead-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-top: 3mm;
+}
+
+.a4-report .letterhead-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.a4-report .letterhead-subtitle {
+  font-size: 10.5px;
+  margin-top: 0.5mm;
+}
+
+.a4-report .letterhead-period {
+  font-size: 9px;
+  color: #333;
+  margin-top: 0.5mm;
+}
+
+.a4-report .letterhead-page {
+  font-size: 9px;
+  color: #333;
+  white-space: nowrap;
+}
+
+.a4-report .signatures {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16mm;
+}
+
+.a4-report .signature-line {
+  width: 55mm;
+  border-top: 0.5pt solid #000;
+  padding-top: 1.5mm;
+  text-align: center;
+  font-size: 9px;
+}
+
+.a4-report .footnote {
+  font-size: 8.5px;
+  color: #555;
+  margin-top: 4mm;
+}
+
+@media screen {
+  .a4-report-preview {
+    background: var(--color-surface);
+    min-height: 100vh;
+    padding: 24px 0;
+  }
+  .a4-report {
+    border: 1px solid var(--color-border-strong);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    padding: 14mm 12mm;
+  }
+}
+
+@media print {
+  .a4-report-preview {
+    padding: 0;
+    background: #fff;
+  }
+  .a4-report {
+    box-shadow: none;
+    border: none;
+    padding: 0;
+    width: auto;
+  }
+}

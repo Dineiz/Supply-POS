@@ -1,0 +1,67 @@
+# Local verification only — proves the two Dockerfiles boot and talk to a
+# real Postgres, the same way `docker build` + a managed host would run them.
+# This is not a production orchestrator: SPEC.md Part 11 targets managed
+# hosts (Railway/Render/Fly + Vercel), see docs/10-deployment.md.
+#
+# Usage:
+#   JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
+#   Web:    http://localhost:3000
+#   API:    http://localhost:4000/health
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: dineiz
+      POSTGRES_PASSWORD: dineiz
+      POSTGRES_DB: dineiz_supply
+    ports:
+      - "5434:5432"
+    volumes:
+      - dineiz_supply_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dineiz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: pnpm --filter @dineiz-supply/db migrate:deploy
+    environment:
+      DATABASE_URL: postgresql://dineiz:dineiz@postgres:5432/dineiz_supply?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://dineiz:dineiz@postgres:5432/dineiz_supply?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set a real JWT_SECRET, e.g. JWT_SECRET=$(openssl rand -hex 32)}
+      CORS_ORIGIN: http://localhost:3000
+      NODE_ENV: production
+      PORT: 4000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  dineiz_supply_pgdata:

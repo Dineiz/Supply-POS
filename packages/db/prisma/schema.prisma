@@ -1,0 +1,974 @@
+// Dineiz Supply — database schema.
+// Rationale for every model/field lives in docs/03-schema.md, not here.
+// Cross-cutting invariants (read docs/00-index.md before changing any of these):
+//   - Every tenant-scoped model carries warehouseId.
+//   - Quantities are Decimal(14,4), always in the item's SELL unit.
+//   - Money is Decimal(14,2). Percentages are Decimal(5,2) (or (6,2) where variance can exceed 100%).
+//   - Nothing is hard-deleted from a financial/audit table — only soft flags and reversing entries.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  OWNER
+  MANAGER
+  CLERK
+  VIEWER
+}
+
+enum UnitType {
+  WEIGHT
+  VOLUME
+  COUNT
+}
+
+enum CustomerType {
+  OWN_BRANCH
+  EXTERNAL_RESTAURANT
+  WALK_IN
+}
+
+enum StockMovementType {
+  PURCHASE_RECEIVED
+  ISSUE
+  RETURN_IN
+  WASTAGE
+  ADJUSTMENT
+  OPENING
+  TRANSFER_OUT
+  TRANSFER_IN
+  SUPPLIER_RETURN
+}
+
+enum IssueStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+}
+
+enum ReturnNoteStatus {
+  DRAFT
+  ACCEPTED
+  REJECTED
+}
+
+enum ReturnCondition {
+  GOOD
+  DAMAGED
+  EXPIRED
+  WRONG_ITEM
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  JAZZCASH
+  EASYPAISA
+  CHEQUE
+  ADJUSTMENT
+}
+
+enum LedgerEntryType {
+  ISSUE
+  RETURN_CREDIT
+  PAYMENT
+  OPENING_BALANCE
+  ADJUSTMENT
+  WRITE_OFF
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum WastageReason {
+  SPOILED
+  EXPIRED
+  DAMAGED
+  PEST
+  THEFT
+  POWER_OUTAGE
+  SPILLAGE
+  QUALITY_REJECT
+  OTHER
+}
+
+enum WastageAttribution {
+  WAREHOUSE
+  CUSTOMER_RETURN
+  SUPPLIER
+}
+
+enum StockCountStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum StockCountType {
+  FULL
+  PARTIAL
+  SPOT
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Core
+// ─────────────────────────────────────────────────────────────────────────
+
+model Warehouse {
+  id      String  @id @default(cuid())
+  name    String
+  address String?
+  phone   String?
+  ntn     String?
+  logoUrl String?
+
+  currency           String @default("PKR")
+  timezone           String @default("Asia/Karachi")
+  financialYearStart Int    @default(7) // starting month, 1-12
+
+  defaultMarginFloorPercent Decimal @default(10) @db.Decimal(5, 2)
+  defaultReturnWindowHours  Int     @default(12)
+
+  wastageApprovalThreshold        Decimal @default(2000) @db.Decimal(14, 2)
+  countVarianceApprovalThreshold  Decimal @default(5000) @db.Decimal(14, 2)
+
+  // Month-end close: entries dated before this need a manager override.
+  // Null means nothing is locked yet.
+  periodLockedBefore DateTime?
+
+  issuePrefix   String @default("ISS")
+  returnPrefix  String @default("RTN")
+  paymentPrefix String @default("PAY")
+  poPrefix      String @default("PO")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users              User[]
+  units              Unit[]
+  categories         Category[]
+  items              Item[]
+  customers          Customer[]
+  suppliers          Supplier[]
+  purchaseLots       PurchaseLot[]
+  stockMovements     StockMovement[]
+  issues             Issue[]
+  returnNotes        ReturnNote[]
+  payments           Payment[]
+  customerLedgers    CustomerLedger[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      GoodsReceipt[]
+  wastages           Wastage[]
+  stockAdjustments   StockAdjustment[]
+  stockCountSessions StockCountSession[]
+  auditLogs          AuditLog[]
+}
+
+model User {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  name         String
+  email        String?
+  passwordHash String?
+  phone        String?
+  role         UserRole
+  pinHash      String?
+
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([warehouseId, email])
+  @@index([warehouseId, isActive])
+}
+
+model Unit {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  code String // KG, G, L, ML, PCS, DZN, BAG, CTN, BOTTLE
+  name String
+  type UnitType
+
+  baseUnitId   String?
+  baseUnit     Unit?   @relation("UnitToBase", fields: [baseUnitId], references: [id])
+  derivedUnits Unit[]  @relation("UnitToBase")
+  factorToBase Decimal @default(1) @db.Decimal(14, 6)
+
+  createdAt DateTime @default(now())
+
+  itemsAsPurchaseUnit Item[] @relation("ItemPurchaseUnit")
+  itemsAsSellUnit     Item[] @relation("ItemSellUnit")
+
+  @@unique([warehouseId, code])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  name      String
+  sortOrder Int    @default(0)
+
+  isPerishable             Boolean @default(false)
+  defaultReturnWindowHours Int?
+  colorHex                 String?
+
+  items Item[]
+
+  @@unique([warehouseId, name])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Items and stock
+// ─────────────────────────────────────────────────────────────────────────
+
+model Item {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  name     String
+  nameUrdu String?
+  sku      String?
+  barcode  String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  purchaseUnitId       String
+  purchaseUnit         Unit    @relation("ItemPurchaseUnit", fields: [purchaseUnitId], references: [id])
+  sellUnitId           String
+  sellUnit             Unit    @relation("ItemSellUnit", fields: [sellUnitId], references: [id])
+  purchaseToSellFactor Decimal @db.Decimal(14, 6)
+
+  // Always in SELL units. Conversion happens once, at goods receipt.
+  currentStockQty Decimal @default(0) @db.Decimal(14, 4)
+  avgCostPerUnit  Decimal @default(0) @db.Decimal(14, 4)
+
+  baseSellPrice      Decimal  @db.Decimal(14, 2)
+  marginFloorPercent Decimal? @db.Decimal(5, 2)
+
+  minStockQty Decimal? @db.Decimal(14, 4)
+  maxStockQty Decimal? @db.Decimal(14, 4)
+  reorderDays Int?
+
+  isPerishable      Boolean @default(false)
+  shelfLifeDays     Int?
+  returnWindowHours Int?
+
+  isActive  Boolean   @default(true)
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+
+  preferredSupplierId String?
+  preferredSupplier   Supplier? @relation(fields: [preferredSupplierId], references: [id])
+
+  sortOrder Int     @default(0)
+  imageUrl  String?
+  location  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseLots       PurchaseLot[]
+  stockMovements     StockMovement[]
+  issueLines         IssueLine[]
+  returnLines        ReturnLine[]
+  customerPrices     CustomerPrice[]
+  purchaseOrderLines PurchaseOrderLine[]
+  goodsReceiptLines  GoodsReceiptLine[]
+  wastages           Wastage[]
+  stockAdjustments   StockAdjustment[]
+  stockCountLines    StockCountLine[]
+
+  @@unique([warehouseId, name])
+  @@index([warehouseId, categoryId, isActive])
+  @@index([warehouseId, barcode])
+}
+
+model PurchaseLot {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  itemId     String
+  item       Item      @relation(fields: [itemId], references: [id])
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  goodsReceiptId  String?
+  goodsReceipt    GoodsReceipt?  @relation(fields: [goodsReceiptId], references: [id])
+  goodsReceiptLine GoodsReceiptLine?
+
+  receivedQty  Decimal @db.Decimal(14, 4)
+  remainingQty Decimal @db.Decimal(14, 4)
+  unitCost     Decimal @db.Decimal(14, 4)
+  totalCost    Decimal @db.Decimal(14, 2)
+
+  receivedAt DateTime
+  expiryDate DateTime?
+
+  batchNumber   String?
+  invoiceNumber String?
+
+  createdAt DateTime @default(now())
+
+  @@index([itemId, expiryDate])
+  @@index([warehouseId, receivedAt])
+}
+
+model StockMovement {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  type StockMovementType
+
+  qty       Decimal @db.Decimal(14, 4)
+  qtyBefore Decimal @db.Decimal(14, 4)
+  qtyAfter  Decimal @db.Decimal(14, 4)
+
+  unitCost  Decimal @db.Decimal(14, 4)
+  totalCost Decimal @db.Decimal(14, 2)
+
+  avgCostBefore Decimal @db.Decimal(14, 4)
+  avgCostAfter  Decimal @db.Decimal(14, 4)
+
+  refType String?
+  refId   String?
+
+  performedById   String?
+  performedByName String
+
+  reason String?
+  notes  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([warehouseId, itemId, createdAt])
+  @@index([refType, refId])
+  @@index([warehouseId, type, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Customers and suppliers
+// ─────────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  name     String
+  nameUrdu String?
+  code     String?
+  type     CustomerType @default(EXTERNAL_RESTAURANT)
+
+  contactName String?
+  phone       String?
+  whatsapp    String?
+  address     String?
+
+  creditLimit    Decimal @default(0) @db.Decimal(14, 2)
+  creditDays     Int     @default(30)
+  currentBalance Decimal @default(0) @db.Decimal(14, 2)
+
+  priceListId     String?
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+
+  isActive Boolean @default(true)
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customerPrices  CustomerPrice[]
+  issues          Issue[]
+  returnNotes     ReturnNote[]
+  payments        Payment[]
+  customerLedgers CustomerLedger[]
+
+  @@unique([warehouseId, code])
+  @@index([warehouseId, isActive])
+}
+
+model CustomerPrice {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  itemId     String
+  item       Item     @relation(fields: [itemId], references: [id])
+
+  price     Decimal   @db.Decimal(14, 2)
+  validFrom DateTime
+  validTo   DateTime?
+
+  @@unique([customerId, itemId, validFrom])
+}
+
+model Supplier {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  name         String
+  contactName  String?
+  phone        String?
+  whatsapp     String?
+  address      String?
+  paymentTerms String?
+  deliveryDays Int?
+
+  rating   Int?
+  notes    String?
+  isActive Boolean @default(true)
+
+  currentPayable Decimal @default(0) @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items          Item[]
+  purchaseLots   PurchaseLot[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
+
+  @@index([warehouseId, isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Issues (delivery slips)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Issue {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  issueNumber String
+
+  // Client-supplied key so a double-tap "Issue & Print" creates one issue, not two.
+  idempotencyKey String? @unique
+
+  status IssueStatus @default(ISSUED)
+
+  subtotal        Decimal @db.Decimal(14, 2)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount       Decimal @default(0) @db.Decimal(14, 2)
+  totalAmount     Decimal @db.Decimal(14, 2)
+  totalCostAmount Decimal @db.Decimal(14, 2)
+
+  paidAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  paymentMethod PaymentMethod?
+
+  balanceBefore Decimal @db.Decimal(14, 2)
+  balanceAfter  Decimal @db.Decimal(14, 2)
+
+  issuedById     String?
+  issuedByName   String
+  receivedByName String?
+
+  notes String?
+
+  createdAt     DateTime  @default(now())
+  issuedAt      DateTime  @default(now())
+  cancelledAt   DateTime?
+  cancelReason  String?
+  cancelledById String?
+
+  printCount Int @default(0)
+
+  lines              IssueLine[]
+  returnNotes        ReturnNote[]
+  paymentAllocations PaymentAllocation[]
+  ledgerEntries      CustomerLedger[]
+
+  @@unique([warehouseId, issueNumber])
+  @@index([warehouseId, customerId, createdAt])
+  @@index([warehouseId, status, createdAt])
+}
+
+model IssueLine {
+  id      String @id @default(cuid())
+  issueId String
+  issue   Issue  @relation(fields: [issueId], references: [id])
+  itemId  String
+  item    Item   @relation(fields: [itemId], references: [id])
+
+  itemName     String
+  itemNameUrdu String?
+  unitCode     String
+
+  qty       Decimal @db.Decimal(14, 4)
+  unitPrice Decimal @db.Decimal(14, 2)
+  lineTotal Decimal @db.Decimal(14, 2)
+
+  unitCost Decimal @db.Decimal(14, 4)
+  lineCost Decimal @db.Decimal(14, 2)
+
+  returnedQty Decimal @default(0) @db.Decimal(14, 4)
+
+  notes     String?
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+
+  returnLines ReturnLine[]
+
+  @@index([issueId])
+  @@index([itemId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Returns
+// ─────────────────────────────────────────────────────────────────────────
+
+model ReturnNote {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  returnNumber String
+
+  originalIssueId String?
+  originalIssue   Issue?  @relation(fields: [originalIssueId], references: [id])
+
+  status ReturnNoteStatus @default(ACCEPTED)
+
+  totalCreditAmount   Decimal @db.Decimal(14, 2)
+  totalCostReversed   Decimal @db.Decimal(14, 2)
+  totalCostWrittenOff Decimal @default(0) @db.Decimal(14, 2)
+
+  balanceBefore Decimal @db.Decimal(14, 2)
+  balanceAfter  Decimal @db.Decimal(14, 2)
+
+  acceptedById   String?
+  acceptedByName String?
+  returnedByName String?
+
+  reason String?
+  notes  String?
+
+  createdAt  DateTime  @default(now())
+  acceptedAt DateTime?
+
+  lines         ReturnLine[]
+  ledgerEntries CustomerLedger[]
+
+  @@unique([warehouseId, returnNumber])
+  @@index([warehouseId, customerId, createdAt])
+}
+
+model ReturnLine {
+  id           String     @id @default(cuid())
+  returnNoteId String
+  returnNote   ReturnNote @relation(fields: [returnNoteId], references: [id])
+
+  itemId      String
+  item        Item       @relation(fields: [itemId], references: [id])
+  issueLineId String?
+  issueLine   IssueLine? @relation(fields: [issueLineId], references: [id])
+
+  itemName String
+  unitCode String
+
+  qty Decimal @db.Decimal(14, 4)
+
+  creditUnitPrice  Decimal @db.Decimal(14, 2)
+  creditAmount     Decimal @db.Decimal(14, 2)
+  originalUnitCost Decimal @db.Decimal(14, 4)
+
+  condition       ReturnCondition @default(GOOD)
+  restoredToStock Boolean         @default(false)
+
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([returnNoteId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Payments
+// ─────────────────────────────────────────────────────────────────────────
+
+model Payment {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  paymentNumber String
+
+  amount    Decimal       @db.Decimal(14, 2)
+  method    PaymentMethod
+  reference String?
+
+  balanceBefore Decimal @db.Decimal(14, 2)
+  balanceAfter  Decimal @db.Decimal(14, 2)
+
+  receivedById   String?
+  receivedByName String
+  paidByName     String?
+
+  notes String?
+
+  paymentDate DateTime
+  createdAt   DateTime @default(now())
+
+  isReversed    Boolean   @default(false)
+  reversedAt    DateTime?
+  reverseReason String?
+
+  allocations   PaymentAllocation[]
+  ledgerEntries CustomerLedger[]
+
+  @@unique([warehouseId, paymentNumber])
+  @@index([warehouseId, customerId, paymentDate])
+}
+
+model PaymentAllocation {
+  id        String  @id @default(cuid())
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id])
+  issueId   String
+  issue     Issue   @relation(fields: [issueId], references: [id])
+
+  amountApplied Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
+  @@index([issueId])
+}
+
+model CustomerLedger {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  entryType LedgerEntryType
+
+  // Generic audit-friendly pointer (see docs/06-decisions.md ADR-004),
+  // plus typed FKs below for real referential integrity and joins.
+  refType   String?
+  refId     String?
+  refNumber String?
+
+  issueId      String?
+  issue        Issue?      @relation(fields: [issueId], references: [id])
+  returnNoteId String?
+  returnNote   ReturnNote? @relation(fields: [returnNoteId], references: [id])
+  paymentId    String?
+  payment      Payment?    @relation(fields: [paymentId], references: [id])
+
+  debit        Decimal @default(0) @db.Decimal(14, 2)
+  credit       Decimal @default(0) @db.Decimal(14, 2)
+  balanceAfter Decimal @db.Decimal(14, 2)
+
+  entryDate   DateTime
+  description String?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([warehouseId, customerId, entryDate, id])
+  @@index([refType, refId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Procurement
+// ─────────────────────────────────────────────────────────────────────────
+
+model PurchaseOrder {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  poNumber String
+  status   PurchaseOrderStatus @default(DRAFT)
+
+  estimatedTotal Decimal? @db.Decimal(14, 2)
+  actualTotal    Decimal? @db.Decimal(14, 2)
+
+  orderDate    DateTime  @default(now())
+  expectedDate DateTime?
+
+  notes       String?
+  createdById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines         PurchaseOrderLine[]
+  goodsReceipts GoodsReceipt[]
+  purchaseLots  PurchaseLot[]
+
+  @@unique([warehouseId, poNumber])
+  @@index([warehouseId, status, orderDate])
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  itemId          String
+  item            Item          @relation(fields: [itemId], references: [id])
+
+  orderedQty  Decimal @db.Decimal(14, 4)
+  receivedQty Decimal @default(0) @db.Decimal(14, 4)
+
+  estimatedUnitCost Decimal  @db.Decimal(14, 4)
+  actualUnitCost    Decimal? @db.Decimal(14, 4)
+  lineTotal         Decimal  @db.Decimal(14, 2)
+
+  @@index([purchaseOrderId])
+}
+
+model GoodsReceipt {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  supplierId      String
+  supplier        Supplier       @relation(fields: [supplierId], references: [id])
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+
+  receiptNumber String
+
+  supplierInvoiceNumber String?
+  supplierInvoiceDate   DateTime?
+  invoiceImageUrl       String?
+
+  totalAmount   Decimal        @db.Decimal(14, 2)
+  paidAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  paymentMethod PaymentMethod?
+
+  receivedById   String?
+  receivedByName String
+  receivedAt     DateTime @default(now())
+  notes          String?
+
+  createdAt DateTime @default(now())
+
+  lines        GoodsReceiptLine[]
+  purchaseLots PurchaseLot[]
+
+  @@unique([warehouseId, receiptNumber])
+  @@index([warehouseId, receivedAt])
+}
+
+model GoodsReceiptLine {
+  id             String       @id @default(cuid())
+  goodsReceiptId String
+  goodsReceipt   GoodsReceipt @relation(fields: [goodsReceiptId], references: [id])
+  itemId         String
+  item           Item         @relation(fields: [itemId], references: [id])
+  purchaseLotId  String?      @unique
+  purchaseLot    PurchaseLot? @relation(fields: [purchaseLotId], references: [id])
+
+  qtyInPurchaseUnit Decimal @db.Decimal(14, 4)
+  qtyInSellUnit     Decimal @db.Decimal(14, 4)
+
+  unitCostPurchaseUnit Decimal @db.Decimal(14, 4)
+  unitCostSellUnit     Decimal @db.Decimal(14, 4)
+  lineTotal            Decimal @db.Decimal(14, 2)
+
+  expiryDate  DateTime?
+  batchNumber String?
+
+  priceVariancePercent Decimal? @db.Decimal(6, 2)
+  varianceFlagged      Boolean  @default(false)
+
+  @@index([goodsReceiptId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Losses and adjustments
+// ─────────────────────────────────────────────────────────────────────────
+
+model Wastage {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  wastageNumber String
+
+  qty        Decimal @db.Decimal(14, 4)
+  unitCost   Decimal @db.Decimal(14, 4)
+  costImpact Decimal @db.Decimal(14, 2)
+
+  reason       WastageReason
+  attributedTo WastageAttribution @default(WAREHOUSE)
+
+  reportedById   String?
+  reportedByName String
+  approvedById   String?
+  approvedByName String?
+
+  photoUrl String?
+  notes    String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([warehouseId, wastageNumber])
+  @@index([warehouseId, itemId, createdAt])
+}
+
+model StockAdjustment {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id])
+
+  adjustmentNumber String
+
+  systemQty     Decimal @db.Decimal(14, 4)
+  countedQty    Decimal @db.Decimal(14, 4)
+  variance      Decimal @db.Decimal(14, 4)
+  varianceValue Decimal @db.Decimal(14, 2)
+
+  reason String
+
+  countSessionId String?
+  countSession   StockCountSession? @relation(fields: [countSessionId], references: [id])
+
+  performedById   String?
+  performedByName String?
+  approvedById    String?
+  approvedByName  String?
+
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@unique([warehouseId, adjustmentNumber])
+  @@index([warehouseId, itemId, createdAt])
+}
+
+model StockCountSession {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  countNumber String
+  status      StockCountStatus @default(IN_PROGRESS)
+  type        StockCountType   @default(FULL)
+
+  itemsCounted       Int     @default(0)
+  itemsWithVariance  Int     @default(0)
+  totalVarianceValue Decimal @default(0) @db.Decimal(14, 2)
+
+  startedById     String?
+  startedByName   String?
+  completedById   String?
+  completedByName String?
+  approvedById    String?
+  approvedByName  String?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  notes       String?
+
+  lines            StockCountLine[]
+  stockAdjustments StockAdjustment[]
+
+  @@unique([warehouseId, countNumber])
+  @@index([warehouseId, status])
+}
+
+model StockCountLine {
+  id        String            @id @default(cuid())
+  sessionId String
+  session   StockCountSession @relation(fields: [sessionId], references: [id])
+  itemId    String
+  item      Item              @relation(fields: [itemId], references: [id])
+
+  systemQty     Decimal @db.Decimal(14, 4)
+  countedQty    Decimal @db.Decimal(14, 4)
+  variance      Decimal @db.Decimal(14, 4)
+  varianceValue Decimal @db.Decimal(14, 2)
+
+  countedById   String?
+  countedByName String?
+  countedAt     DateTime @default(now())
+  notes         String?
+
+  @@unique([sessionId, itemId])
+  @@index([sessionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Audit
+// ─────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+
+  actorId   String?
+  actorName String
+  actorRole UserRole
+
+  action     String
+  entityType String
+  entityId   String
+
+  before Json?
+  after  Json?
+
+  reason    String?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([warehouseId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+}

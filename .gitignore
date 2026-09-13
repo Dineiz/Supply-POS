@@ -1,0 +1,27 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+
+*.log
+.DS_Store
+Thumbs.db
+
+# Brand assets live in their own repo (github.com/Dineiz/Dineiz-assets) and
+# are checked out here for local reference only — never embedded in this repo.
+/Dineiz-assets/
+
+# IDEs, editor configs, and local tools
+.claude/
+.agents/
+.gemini/
+.cursor/
+.vscode/
+.idea/
+*.swp

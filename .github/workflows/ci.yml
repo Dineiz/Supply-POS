@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dineiz
+          POSTGRES_PASSWORD: dineiz
+          POSTGRES_DB: dineiz_supply_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://dineiz:dineiz@localhost:5432/dineiz_supply_ci?schema=public
+      JWT_SECRET: ci-only-secret
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations
+        run: pnpm db:migrate:deploy
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (packages/logic)
+        run: pnpm --filter @dineiz-supply/logic test
+
+      - name: Build API (type/schema-drift gate)
+        run: pnpm --filter @dineiz-supply/api build
+
+      - name: Build web
+        run: pnpm --filter @dineiz-supply/web build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000

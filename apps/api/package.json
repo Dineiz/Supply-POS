@@ -1,0 +1,28 @@
+{
+  "name": "@dineiz-supply/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@fastify/cors": "^10.0.0",
+    "@fastify/jwt": "^9.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "fastify-plugin": "^5.0.0",
+    "bcryptjs": "^2.4.3",
+    "tsx": "^4.19.0",
+    "@dineiz-supply/db": "workspace:*",
+    "@dineiz-supply/logic": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "@types/bcryptjs": "^2.4.6"
+  }
+}

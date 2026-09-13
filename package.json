@@ -1,0 +1,18 @@
+{
+  "name": "dineiz-supply",
+  "private": true,
+  "version": "0.0.1",
+  "packageManager": "pnpm@10.13.1",
+  "scripts": {
+    "dev:web": "pnpm --filter @dineiz-supply/web dev",
+    "dev:api": "pnpm --filter @dineiz-supply/api dev",
+    "build": "pnpm -r --if-present run build",
+    "test": "pnpm -r --if-present run test",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "db:generate": "pnpm --filter @dineiz-supply/db generate",
+    "db:migrate": "pnpm --filter @dineiz-supply/db migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @dineiz-supply/db migrate:deploy",
+    "db:seed": "pnpm --filter @dineiz-supply/db seed",
+    "db:studio": "pnpm --filter @dineiz-supply/db studio"
+  }
+}
