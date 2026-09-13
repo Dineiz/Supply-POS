@@ -13,7 +13,6 @@ const METHOD_LABEL: Record<string, string> = {
 export function DeliveryNote({ data, printCount }: { data: PrintData; printCount: number }) {
   const { issue, customer, warehouse, oldestUnpaid } = data;
   const totalQty = issue.lines.reduce((sum, l) => sum + Number(l.qty), 0);
-  const available = Math.max(0, Number(customer.creditLimit) - Number(issue.balanceAfter));
 
   return (
     <div className="receipt">
@@ -91,12 +90,6 @@ export function DeliveryNote({ data, printCount }: { data: PrintData; printCount
       <KvRow label="BALANCE DUE" value={formatMoneyPrecise(issue.balanceAfter)} bold />
       <hr className="rule-heavy" />
 
-      {Number(customer.creditLimit) > 0 && (
-        <div style={{ marginTop: "1mm" }}>
-          <KvRow label="Credit limit" value={formatMoneyPrecise(customer.creditLimit)} />
-          <KvRow label="Available" value={formatMoneyPrecise(available)} />
-        </div>
-      )}
 
       {oldestUnpaid && (
         <p style={{ marginTop: "1mm" }}>
