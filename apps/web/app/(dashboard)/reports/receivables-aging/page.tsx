@@ -104,10 +104,7 @@ export default function ReceivablesAgingPage() {
               )}
               {report?.rows.map((r) => (
                 <tr key={r.customerId} className="border-b border-border last:border-0 hover:bg-surface">
-                  <td className="px-4 py-3 text-ink">
-                    {r.name}
-                    {r.overCreditLimit && <span className="ml-2 text-xs font-medium text-danger">⚠ over limit</span>}
-                  </td>
+                  <td className="px-4 py-3 text-ink">{r.name}</td>
                   <td className="font-tabular px-4 py-3 text-right text-ink-muted">{Number(r.current) > 0 ? formatMoney(r.current) : "—"}</td>
                   <td className="font-tabular px-4 py-3 text-right text-warning">{Number(r.d8_15) > 0 ? formatMoney(r.d8_15) : "—"}</td>
                   <td className="font-tabular px-4 py-3 text-right text-warning">{Number(r.d16_30) > 0 ? formatMoney(r.d16_30) : "—"}</td>
