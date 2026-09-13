@@ -22,8 +22,9 @@ if (!process.env.DATABASE_URL && isProduction) {
   throw new Error("[dineiz-supply-api] DATABASE_URL must be set in production.");
 }
 
-// Comma-separated in production (e.g. "https://example.com,https://www.example.com")
-export const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? "http://localhost:3000")
+// Accepts CORS_ORIGINS or CORS_ORIGIN (comma-separated in production)
+const rawCors = process.env.CORS_ORIGINS ?? process.env.CORS_ORIGIN ?? "http://localhost:3000";
+export const CORS_ORIGIN = rawCors
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
