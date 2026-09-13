@@ -398,7 +398,7 @@ export default function CounterPage() {
             </div>
           </div>
 
-          <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 pb-20 sm:grid-cols-3 md:pb-3 lg:grid-cols-4">
+          <div className="grid flex-1 auto-rows-min grid-cols-2 gap-2 overflow-y-auto p-3 pb-24 sm:grid-cols-3 md:pb-3 lg:grid-cols-4">
             {!catalogueLoaded && (
               <p className="col-span-full py-12 text-center text-sm text-ink-muted">Loading catalogue…</p>
             )}
