@@ -127,6 +127,19 @@ async function main() {
   const managerPinHash = await bcrypt.hash("5678", 10);
   const clerkPinHash = await bcrypt.hash("1234", 10);
 
+  const supplyPasswordHash = await bcrypt.hash("supply@123", 10);
+
+  await prisma.user.create({
+    data: {
+      warehouseId: warehouse.id,
+      name: "Dineiz Admin",
+      email: "supply@dineiz.com",
+      passwordHash: supplyPasswordHash,
+      pinHash: ownerPinHash,
+      role: "OWNER" as UserRoleType,
+    },
+  });
+
   await prisma.user.create({
     data: {
       warehouseId: warehouse.id,

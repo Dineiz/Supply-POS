@@ -13,6 +13,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "create-account": "tsx prisma/create-account.ts",
     "typecheck": "tsc --noEmit"
   },
   "prisma": {

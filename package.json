@@ -13,6 +13,7 @@
     "db:migrate": "pnpm --filter @dineiz-supply/db migrate:dev",
     "db:migrate:deploy": "pnpm --filter @dineiz-supply/db migrate:deploy",
     "db:seed": "pnpm --filter @dineiz-supply/db seed",
+    "db:create-account": "pnpm --filter @dineiz-supply/db create-account",
     "db:studio": "pnpm --filter @dineiz-supply/db studio"
   }
 }
