@@ -82,30 +82,26 @@ export default function CustomersPage() {
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3 text-right">Owes</th>
-              <th className="px-4 py-3 text-right">Credit limit</th>
-              <th className="px-4 py-3 text-right">% of limit</th>
               <th className="px-4 py-3">Status</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-ink-muted">
+                <td colSpan={4} className="px-4 py-10 text-center text-ink-muted">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-ink-muted">
+                <td colSpan={4} className="px-4 py-10 text-center text-ink-muted">
                   No customers match.
                 </td>
               </tr>
             )}
             {filtered.map((c) => {
               const balance = Number(c.currentBalance);
-              const limit = Number(c.creditLimit);
-              const utilization = limit > 0 ? (balance / limit) * 100 : 0;
               return (
                 <tr key={c.id} className="border-b border-border last:border-0 hover:bg-surface">
                   <td className="px-4 py-3">
@@ -116,22 +112,6 @@ export default function CustomersPage() {
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{TYPE_LABEL[c.type]}</td>
                   <td className="font-tabular px-4 py-3 text-right text-ink">{formatMoney(balance)}</td>
-                  <td className="font-tabular px-4 py-3 text-right text-ink-muted">
-                    {limit > 0 ? formatMoney(limit) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {limit > 0 ? (
-                      <span
-                        className={`font-tabular text-xs font-medium ${
-                          utilization >= 100 ? "text-danger" : utilization >= 80 ? "text-warning" : "text-ink-muted"
-                        }`}
-                      >
-                        {Math.round(utilization)}%
-                      </span>
-                    ) : (
-                      <span className="text-ink-faint">—</span>
-                    )}
-                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
