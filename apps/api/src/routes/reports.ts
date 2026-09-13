@@ -653,7 +653,6 @@ export default async function reportRoutes(app: FastifyInstance) {
         returns: returns.toFixed(2),
         net: sales.minus(returns).toFixed(2),
         owes: owes.toFixed(2),
-        overCreditLimit: customer ? new Decimal(customer.creditLimit).gt(0) && owes.gt(customer.creditLimit) : false,
         returnRatePercent: sales.gt(0) ? returns.dividedBy(sales).times(100).toFixed(1) : "0.0",
       };
     });
