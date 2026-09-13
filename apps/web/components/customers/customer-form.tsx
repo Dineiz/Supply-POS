@@ -22,7 +22,6 @@ interface FormState {
   phone: string;
   whatsapp: string;
   address: string;
-  creditLimit: string;
   creditDays: string;
   discountPercent: string;
   notes: string;
@@ -38,7 +37,6 @@ const EMPTY: FormState = {
   phone: "",
   whatsapp: "",
   address: "",
-  creditLimit: "0",
   creditDays: "30",
   discountPercent: "0",
   notes: "",
@@ -71,7 +69,6 @@ export function CustomerForm({ mode, customerId }: CustomerFormProps) {
           phone: c.phone ?? "",
           whatsapp: c.whatsapp ?? "",
           address: c.address ?? "",
-          creditLimit: c.creditLimit,
           creditDays: String(c.creditDays),
           discountPercent: c.discountPercent,
           notes: c.notes ?? "",
@@ -96,7 +93,6 @@ export function CustomerForm({ mode, customerId }: CustomerFormProps) {
       phone: form.phone || null,
       whatsapp: form.whatsapp || null,
       address: form.address || null,
-      creditLimit: Number(form.creditLimit || 0),
       creditDays: Number(form.creditDays || 0),
       discountPercent: Number(form.discountPercent || 0),
       notes: form.notes || null,
@@ -196,25 +192,14 @@ export function CustomerForm({ mode, customerId }: CustomerFormProps) {
       </Section>
 
       <Section title="Credit">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Credit limit" optional hint="0 = no credit allowed">
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={form.creditLimit}
-              onChange={(e) => set("creditLimit", e.target.value)}
-            />
-          </Field>
-          <Field label="Credit days" hint="How many days they have to pay after a delivery">
-            <Input
-              type="number"
-              min="0"
-              value={form.creditDays}
-              onChange={(e) => set("creditDays", e.target.value)}
-            />
-          </Field>
-        </div>
+        <Field label="Credit days" hint="How many days they have to pay after a delivery">
+          <Input
+            type="number"
+            min="0"
+            value={form.creditDays}
+            onChange={(e) => set("creditDays", e.target.value)}
+          />
+        </Field>
         <Field label="Discount %" optional hint="Applied automatically to everything this customer buys, if any">
           <Input
             type="number"
