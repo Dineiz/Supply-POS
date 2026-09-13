@@ -14,9 +14,12 @@ end-to-end via the actual counter screen UI and directly against the API —
 see [07-progress.md](./07-progress.md#phase-4--the-counter-screen--done-verified-in-browser)
 for the exact scenario run. One database transaction:
 
-1. Validate customer is active, items exist and are active, credit check
-   (warn at 80% of `creditLimit`, block at 100% unless a manager PIN override
-   is supplied — log the override either way).
+1. Validate customer is active, items exist and are active, stock check
+   (block if any line's qty exceeds `currentStockQty` unless a manager PIN
+   override is supplied — log the override either way). There is no
+   credit-limit check — that concept was removed entirely (see
+   [03-schema.md](./03-schema.md#customer) and
+   [07-progress.md](./07-progress.md)).
 2. Create `Issue` + `IssueLine`s, freezing `itemName`, `unitCode`,
    `unitPrice`, `unitCost` (= current `item.avgCostPerUnit`) onto each line.
 3. Decrement `item.currentStockQty` per line, atomically.

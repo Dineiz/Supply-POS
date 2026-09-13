@@ -54,7 +54,7 @@ avgCost, price, minStockQty, isPerishable }`, ordered by `sortOrder, name`.
 ## `GET /customers`
 
 Requires auth. Returns active customers: `{ id, name, nameUrdu, code, type,
-currentBalance, creditLimit, creditDays, discountPercent }`, ordered by
+currentBalance, creditDays, discountPercent }`, ordered by
 name.
 
 ## `POST /issues`
@@ -83,10 +83,10 @@ step list):
   (`item.avgCostPerUnit`), computes totals via `calculateIssueTotals`
   (customer's `discountPercent` applied on top of any per-line discount).
 - **Without** `override`: `409` if any line would take stock negative
-  (`shortItems` lists which) or if the new balance would exceed
-  `creditLimit` (`overCredit: true`). **With** `override`: proceeds anyway,
-  and a negative-stock line's `StockMovement.reason` records the override
-  reason.
+  (`shortItems` lists which). There is no credit-limit check — removed
+  entirely, see [03-schema.md](./03-schema.md#customer). **With**
+  `override`: proceeds anyway, and a negative-stock line's
+  `StockMovement.reason` records the override reason.
 - Freezes `itemName`, `unitCode`, `unitPrice`, `unitCost` onto each
   `IssueLine`; decrements stock; writes one `StockMovement` per line; writes
   a `CustomerLedger` debit row; updates `Customer.currentBalance`.
@@ -513,10 +513,9 @@ days past due / `d8_15` / `d16_30` / `d30_plus`). Same
 [`ageLedgerDebits`](../packages/logic/src/aging.ts) FIFO-consumption of the
 customer's **whole** ledger as before (see
 [07-progress.md](./07-progress.md) Phase 8 for why it has to be the whole
-ledger, not just `Issue` rows). Adds `phone`, `overCreditLimit`
-(`creditLimit > 0 && total > creditLimit`), a `needsAttention` block (anyone
-with a `d30_plus` balance, with `oldestDays`), and `percentOfTotal` per
-bucket. Returns `AgingReport`. `GET /customers/:id/ledger`'s own `aging`
+ledger, not just `Issue` rows). Adds `phone`, a `needsAttention` block
+(anyone with a `d30_plus` balance, with `oldestDays`), and `percentOfTotal`
+per bucket. Returns `AgingReport`. `GET /customers/:id/ledger`'s own `aging`
 field uses these same buckets and the same function, so the two reports never
 disagree on what a customer owes.
 
@@ -589,8 +588,7 @@ range — same convention as `profit-loss` and `daily-summary`; every
 being no draft/reject workflow wired up anywhere, so an unfiltered status
 isn't a live bug), `net = sales - returns`, and `owes` (the customer's live
 `currentBalance`, not scoped to the period — a balance is a snapshot, the
-same figure Customer Statement and Receivables Aging show).
-`overCreditLimit` mirrors `receivables-aging`'s own flag exactly. A
+same figure Customer Statement and Receivables Aging show). A
 `returnRate` block ranks customers by `returns/sales`, flags the highest, and
 reports a **sales-weighted** average (`Σreturns/Σsales`, not a mean of the
 per-customer percentages) — checked against the brief's own worked example

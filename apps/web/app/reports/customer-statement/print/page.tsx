@@ -56,8 +56,6 @@ function PrintCustomerStatement() {
   if (error) return <p className="p-6 text-sm text-danger">{error}</p>;
   if (!customer || !statement) return <p className="p-6 text-sm text-ink-muted">Loading…</p>;
 
-  const available = Math.max(0, Number(customer.creditLimit) - Number(customer.currentBalance));
-
   return (
     <div className="a4-report-preview">
       <button onClick={() => window.print()} className="no-print fixed right-4 top-4 rounded-md bg-ink px-4 py-2 text-sm text-white">
@@ -115,11 +113,6 @@ function PrintCustomerStatement() {
               <span className="num">{formatMoneyPrecise(statement.aging[key])}</span>
             </div>
           ))}
-          <div className="rule-light" />
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.5mm" }}>
-            <span>Credit limit: {formatMoneyPrecise(customer.creditLimit)}</span>
-            <span>Available: {formatMoneyPrecise(available)}</span>
-          </div>
         </div>
 
         <p className="footnote">

@@ -90,7 +90,6 @@ export default function CustomerStatementPage() {
     for (const [key, label] of BUCKET_LABELS) {
       addPdfText(report, `${label}: ${formatMoneyPrecise(statement.aging[key])}`, { size: 8.5, gap: 4 });
     }
-    addPdfText(report, `Credit limit: ${formatMoneyPrecise(customer.creditLimit)}`, { size: 8.5, gap: 8 });
     addPdfText(report, "This statement is computer generated. Please report any mistake within 7 days.", {
       size: 8,
       color: 100,
@@ -162,9 +161,7 @@ export default function CustomerStatementPage() {
         <div className="mb-4 flex items-center justify-between rounded-lg border border-border bg-paper p-4">
           <div>
             <p className="text-sm font-medium text-ink">{customer.name}</p>
-            <p className="text-xs text-ink-muted">
-              Credit limit {formatMoney(customer.creditLimit)} · pays within {customer.creditDays} days
-            </p>
+            <p className="text-xs text-ink-muted">Pays within {customer.creditDays} days</p>
           </div>
           <p className="font-tabular text-lg font-semibold text-ink">{formatMoney(customer.currentBalance)}</p>
         </div>
@@ -237,10 +234,6 @@ export default function CustomerStatementPage() {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-xs text-ink-muted">
-              Credit limit {formatMoney(customer!.creditLimit)} · Available{" "}
-              {formatMoney(Math.max(0, Number(customer!.creditLimit) - Number(customer!.currentBalance)))}
-            </p>
           </div>
         </>
       )}

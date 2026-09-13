@@ -23,7 +23,7 @@ up; do not let this file go stale — see the vault's working rules in
 
 | Case | Behaviour | Status |
 |---|---|---|
-| Customer over credit limit | Amber at 80%, red block at 100% with manager PIN override, logged | **Handled** — [`apps/api/src/routes/issues.ts`](../apps/api/src/routes/issues.ts) (`overCredit` check, 409 without override) + [`apps/web/app/counter/page.tsx`](../apps/web/app/counter/page.tsx) (amber banner from 80%, override modal on block). Verified: an order pushing balance over `creditLimit` returns 409, and `/auth/authorize-override` + resubmit succeeds |
+| Customer over credit limit | ~~Amber at 80%, red block at 100% with manager PIN override, logged~~ | **Removed** — the credit-limit concept (field, blocking check, warnings, report flags) was removed entirely per request; a customer's balance is never capped |
 | Item out of stock | Warning with manager override, never a hard block | **Handled** — same file, `shortItems` check, 409 without override, override resubmits successfully. Verified against Red Chilli Powder (seeded at 0 stock) |
 | Issue cancelled after printing | Stock returns, ledger reversed with a credit entry, slip marked void, void notice prints | Planned — Phase 4 |
 | Clerk issues to wrong customer | Cancel and reissue; both remain in the audit trail, no silent edit | Planned — Phase 4 |

@@ -91,8 +91,13 @@ here, in the same database transaction as the stock change.**
 `type`: `OWN_BRANCH | EXTERNAL_RESTAURANT | WALK_IN`. `currentBalance` is
 denormalised (see cross-cutting rules) and is the number the counter screen
 shows instantly — never computed by summing `CustomerLedger` on read.
-`creditLimit`/`creditDays` back the soft-block rules in
-[`SPEC.md` Part 5](../SPEC.md#part-5--payments-and-credit).
+`creditDays` is only used to bucket aging (Receivables Aging, Customer
+Statement) — how many days after a delivery it's considered "current" before
+falling into the past-due buckets. There is no credit-limit cap: an earlier
+version had `creditLimit` and blocked deliveries once a balance exceeded it
+(SPEC.md Part 5), but that was removed entirely per request — no field, no
+check, no warning, anywhere (migration
+`20260913222033_remove_customer_credit_limit`).
 
 ## CustomerPrice
 

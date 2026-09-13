@@ -59,7 +59,6 @@ export interface Customer {
   whatsapp?: string | null;
   address?: string | null;
   currentBalance: string;
-  creditLimit: string;
   creditDays: number;
   discountPercent: string;
   isActive?: boolean;
@@ -201,7 +200,6 @@ export interface PrintData {
     nameUrdu: string | null;
     code: string | null;
     phone: string | null;
-    creditLimit: string;
     creditDays: number;
   };
   warehouse: {
@@ -359,7 +357,6 @@ export interface AgingRow extends AgingBuckets {
   name: string;
   phone: string | null;
   total: string;
-  overCreditLimit: boolean;
 }
 
 export interface NeedsAttentionRow {
@@ -375,7 +372,6 @@ export interface AgingReport {
   totals: AgingBuckets & { grandTotal: string };
   percentOfTotal: AgingBuckets;
   needsAttention: NeedsAttentionRow[];
-  overCreditLimit: AgingRow[];
 }
 
 export interface StockReportRow {
@@ -444,7 +440,6 @@ export interface SalesByCustomerRow {
   returns: string;
   net: string;
   owes: string;
-  overCreditLimit: boolean;
   returnRatePercent: string;
 }
 

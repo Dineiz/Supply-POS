@@ -63,10 +63,11 @@ Both numbers were independently recomputed by hand against the weighted-average 
 - **Idempotency key verified**: resubmitting the same `x-idempotency-key`
   returns the original issue and does not double-decrement stock (tested
   directly against the API).
-- **Credit-limit block verified**: an order that would exceed
-  `Customer.creditLimit` returns `409` with `overCredit: true`; the
-  "Get manager override" button calls `/auth/authorize-override` and, once
-  approved, resubmits with the override attached.
+- **Credit-limit block verified** (later removed — see below): at the time,
+  an order that would exceed `Customer.creditLimit` returned `409` with
+  `overCredit: true`; the "Get manager override" button called
+  `/auth/authorize-override` and, once approved, resubmitted with the
+  override attached.
 - **Out-of-stock block verified**: issuing more than `Item.currentStockQty`
   returns `409` with the short items listed, same override path.
 - Not yet built: printing (Phase 5 — the "Issue" button does not print
@@ -397,6 +398,31 @@ rather than orphaned). Two entries from the brief's own hub mockup were
 response already carries an `orders` list with a Paid/Partial/Unpaid status,
 which is exactly what that mockup entry described. "Supplier Balances"
 genuinely cannot be built honestly yet — it would need
+
+## Customer credit limit — removed
+
+Per explicit request, the credit-limit cap on customers was removed
+entirely — not disabled, not relaxed, the field and every check/display
+built on it. Previously: `Customer.creditLimit`, a soft-block in `POST
+/issues` (409 `overCredit: true` once balance would exceed it, requiring a
+manager override), an amber/red warning on the counter screen and customer
+picker, a "Credit limit / Available" line on the printed delivery note and
+customer statement, and an `overCreditLimit` flag on both Receivables Aging
+and Sales by Customer.
+
+All of it is gone: `apps/api/src/routes/issues.ts` only blocks on
+insufficient stock now; `apps/api/src/routes/customers.ts`,
+`apps/api/src/routes/reports.ts`, `apps/web/lib/types.ts`, every affected
+report page (on-screen + print), the customer form, the customers list,
+the counter screen, `customer-picker.tsx`, and `delivery-note.tsx` were all
+updated to match. `Customer.creditLimit` was dropped from the schema via
+migration `20260913222033_remove_customer_credit_limit`. `creditDays`
+(payment terms, used only for aging buckets) is untouched — that's a
+separate concept and was never part of this request.
+
+Verified: `pnpm typecheck` passes clean across the whole workspace; the
+Item form's own buy/sell conversion flow (a separate, unrelated fix earlier
+the same day) was re-checked and still works.
 `GoodsReceipt.paidAmount` to actually be written somewhere, and nothing in
 this codebase writes it (same gap Purchase Register and Daily Summary both
 already document). Building either would mean fabricated data or a dead

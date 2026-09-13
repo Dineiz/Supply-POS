@@ -414,12 +414,12 @@ export default function CounterPage() {
                 <button
                   key={item.id}
                   onClick={() => addItem(item)}
-                  className={`flex flex-col items-start rounded-lg border-2 p-3.5 text-left transition-colors ${
+                  className={`flex flex-col items-start rounded-lg border-2 p-3.5 text-left transition-all duration-100 active:scale-[0.96] ${
                     isOut
-                      ? "border-border bg-surface opacity-60"
+                      ? "border-border bg-surface opacity-60 active:bg-border"
                       : isLow
-                        ? "border-warning-surface bg-warning-surface hover:border-warning"
-                        : "border-border bg-paper hover:border-accent"
+                        ? "border-warning-surface bg-warning-surface hover:border-warning active:border-warning"
+                        : "border-border bg-paper hover:border-accent active:border-accent active:bg-surface-hover"
                   }`}
                 >
                   <p className="text-base font-semibold leading-snug text-ink">{item.name}</p>

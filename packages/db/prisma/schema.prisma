@@ -392,7 +392,6 @@ model Customer {
   whatsapp    String?
   address     String?
 
-  creditLimit    Decimal @default(0) @db.Decimal(14, 2)
   creditDays     Int     @default(30)
   currentBalance Decimal @default(0) @db.Decimal(14, 2)
 

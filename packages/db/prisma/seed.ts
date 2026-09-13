@@ -72,7 +72,6 @@ async function createCustomerWithOpeningBalance(params: {
   code: string;
   type?: "OWN_BRANCH" | "EXTERNAL_RESTAURANT" | "WALK_IN";
   phone?: string;
-  creditLimit: number;
   creditDays?: number;
   openingBalance: number;
   balanceAgeDays: number;
@@ -84,7 +83,6 @@ async function createCustomerWithOpeningBalance(params: {
       code: params.code,
       type: params.type ?? "EXTERNAL_RESTAURANT",
       phone: params.phone,
-      creditLimit: params.creditLimit,
       creditDays: params.creditDays ?? 30,
       currentBalance: params.openingBalance,
     },
@@ -453,7 +451,6 @@ async function main() {
     name: "Al-Madina Restaurant",
     code: "CUS-001",
     phone: "0321-9876543",
-    creditLimit: 50000,
     openingBalance: 2900,
     balanceAgeDays: 4,
   });
@@ -463,7 +460,6 @@ async function main() {
     name: "Bismillah Restaurant",
     code: "CUS-002",
     phone: "0333-1122334",
-    creditLimit: 30000,
     openingBalance: 5400,
     balanceAgeDays: 20,
   });
@@ -473,7 +469,6 @@ async function main() {
     name: "Karachi Grill",
     code: "CUS-003",
     phone: "0300-5566778",
-    creditLimit: 40000,
     openingBalance: 6600,
     balanceAgeDays: 65,
   });
@@ -483,7 +478,6 @@ async function main() {
     name: "New Town Kitchen",
     code: "CUS-004",
     phone: "0345-9988776",
-    creditLimit: 20000,
     openingBalance: 0,
     balanceAgeDays: 0,
   });
@@ -493,7 +487,6 @@ async function main() {
     name: "Walk-in Customer",
     code: "WALKIN",
     type: "WALK_IN",
-    creditLimit: 0,
     creditDays: 0,
     openingBalance: 0,
     balanceAgeDays: 0,

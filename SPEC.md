@@ -177,10 +177,12 @@ Amount received [2,000] → ISS-0041 (800, fully paid), ISS-0048 (1,200, fully
 paid), ISS-0052 (950, 0 applied) → After this payment: PKR 950
 ```
 
-**Credit limits per restaurant:** `creditLimit`, `creditDays`. Balance + this
-order ≤ 80% of limit → proceed silently. 80–100% → amber warning, proceed.
-Over 100% → red block, **manager PIN overrides — always**, logged with who
-and why. Software must never be the reason a warehouse refuses a sale.
+**Credit limits per restaurant — removed.** This spec originally called for
+a `creditLimit`/`creditDays` soft-block (80% amber warning, 100% red block,
+manager PIN override). The credit-limit cap itself was removed entirely per
+explicit request — no field, no warning, no block, anywhere in the app.
+`creditDays` remains (see docs/03-schema.md) — it's only used to bucket
+aging reports, not to restrict anything.
 
 **Aging report:** current / 1-15d / 16-30d / 31-60d / 60d+ buckets per
 customer. The 60d+ column is the single most useful report for the owner.
