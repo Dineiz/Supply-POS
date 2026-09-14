@@ -57,6 +57,16 @@ async function main() {
         { warehouseId: warehouse.id, code: "DZN", name: "Dozen", type: "COUNT" },
       ],
     });
+
+    // Same reasoning as the units above: Receiving and the item page's
+    // "+ Add stock" both require picking a supplier, and a brand-new
+    // warehouse has none -- a plain, generic placeholder means the owner
+    // can record their first stock immediately, then rename it (or add
+    // real ones) whenever they get around to Setup > Suppliers.
+    console.log("Seeding a default placeholder supplier (General Supplier)...");
+    await prisma.supplier.create({
+      data: { warehouseId: warehouse.id, name: "General Supplier" },
+    });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
