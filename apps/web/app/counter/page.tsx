@@ -126,6 +126,17 @@ export default function CounterPage() {
     if (!customer || lines.length === 0) return;
     setSubmitting(true);
     setBlock(null);
+
+    // Pre-open print window synchronously within the user gesture so mobile and desktop browsers don't block it as a popup.
+    const printWin = typeof window !== "undefined" ? window.open("", "_blank") : null;
+    if (printWin) {
+      try {
+        printWin.document.title = "Preparing receipt…";
+      } catch {
+        // Ignore cross-origin access restriction if any
+      }
+    }
+
     try {
       const result = await authFetch<IssueResult>("/issues", {
         method: "POST",
@@ -137,13 +148,23 @@ export default function CounterPage() {
         }),
       });
       setLastIssue(result);
-      const opened = openPrintTab(result.id);
-      setPrintBlocked(!opened);
+
+      if (printWin && !printWin.closed) {
+        printWin.location.href = `/print/issue/${result.id}`;
+        setPrintBlocked(false);
+      } else {
+        const opened = openPrintTab(result.id);
+        setPrintBlocked(!opened);
+      }
+
       clearCart();
       setOverride(null);
       setIdempotencyKey(crypto.randomUUID());
       await refreshCatalogue();
     } catch (err) {
+      if (printWin && !printWin.closed) {
+        printWin.close();
+      }
       if (err instanceof ApiError && err.status === 409) {
         const body = err.body as { message: string; shortItems: BlockInfo["shortItems"] };
         setBlock(body);

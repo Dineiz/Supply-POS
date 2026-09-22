@@ -17,5 +17,5 @@ const SOURCES = {
 
 export function Logo({ variant = "wordmark", theme = "light", className }: LogoProps) {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={SOURCES[variant][theme]} alt="Dineiz" className={className} />;
+  return <img src={SOURCES[variant][theme]} alt="Dineiz" className={`w-auto ${className || ""}`.trim()} />;
 }

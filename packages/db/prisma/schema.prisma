@@ -158,6 +158,9 @@ model Warehouse {
   // affected by this -- it only changes the warehouse-facing picking slip.
   printMultipleTickets Boolean @default(false)
 
+  // Paper width for thermal receipts: "80mm" (standard POS printer) or "58mm" (portable / compact thermal printer).
+  receiptPaperWidth String @default("80mm")
+
   issuePrefix   String @default("ISS")
   returnPrefix  String @default("RTN")
   paymentPrefix String @default("PAY")

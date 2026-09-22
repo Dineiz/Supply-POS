@@ -47,7 +47,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Printed documents (Delivery Note / Picking Slip), 80mm thermal ---- */
+/* ---- Printed documents (Delivery Note / Picking Slip), 80mm & 58mm thermal ---- */
 
 .receipt {
   width: 72mm;
@@ -60,16 +60,32 @@ body {
   background: #fff;
 }
 
+/* 58mm compact thermal roll formatting */
+.receipt.paper-58mm {
+  width: 48mm;
+  padding: 2mm 0;
+  font-size: 9.5px;
+  line-height: 1.35;
+}
+
 .receipt .rule-heavy {
   border: none;
   border-top: 2px solid #000;
   margin: 2mm 0;
 }
 
+.receipt.paper-58mm .rule-heavy {
+  margin: 1.5mm 0;
+}
+
 .receipt .rule-light {
   border: none;
   border-top: 1px dashed #000;
   margin: 1.5mm 0;
+}
+
+.receipt.paper-58mm .rule-light {
+  margin: 1mm 0;
 }
 
 .receipt .center {
@@ -84,6 +100,12 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 4mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.receipt.paper-58mm .kv-row {
+  gap: 2mm;
 }
 
 .receipt .kv-row .label {
@@ -99,6 +121,12 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 2mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.receipt.paper-58mm .line-cols {
+  gap: 1.5mm;
 }
 
 .receipt .line-cols .col-qty,
@@ -116,10 +144,21 @@ body {
   min-width: 16mm;
 }
 
+.receipt.paper-58mm .col-rate,
+.receipt.paper-58mm .col-amount {
+  min-width: 11mm;
+}
+
 .receipt .signatures {
   display: flex;
   justify-content: space-between;
   margin-top: 8mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.receipt.paper-58mm .signatures {
+  margin-top: 5mm;
 }
 
 @media screen {
@@ -133,12 +172,31 @@ body {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
     padding: 6mm 4mm;
   }
+  .receipt.paper-58mm {
+    padding: 4mm 3mm;
+  }
 }
 
 @media print {
   @page {
     size: 80mm auto;
     margin: 0;
+  }
+  @page receipt80 {
+    size: 80mm auto;
+    margin: 0;
+  }
+  @page receipt58 {
+    size: 58mm auto;
+    margin: 0;
+  }
+  .receipt.paper-58mm {
+    page: receipt58;
+    padding: 2mm 2mm;
+  }
+  .receipt.paper-80mm {
+    page: receipt80;
+    padding: 3mm 4mm;
   }
   html,
   body {
@@ -157,9 +215,11 @@ body {
     border: none;
     padding: 3mm 4mm;
     page-break-after: always;
+    break-after: page;
   }
   .receipt:last-child {
     page-break-after: auto;
+    break-after: auto;
   }
 }
 

@@ -10,11 +10,12 @@ export function PickingSlip({
   lines?: PrintLine[];
   ticketLabel?: string;
 }) {
-  const { issue, customer, perishableGuidance } = data;
+  const { issue, customer, warehouse, perishableGuidance } = data;
   const displayLines = lines ?? issue.lines;
+  const paperClass = warehouse.receiptPaperWidth === "58mm" ? "paper-58mm" : "paper-80mm";
 
   return (
-    <div className="receipt">
+    <div className={`receipt ${paperClass}`}>
       <div className="center">
         <p className="bold">** PICKING SLIP **</p>
         <p>{issue.issueNumber}</p>

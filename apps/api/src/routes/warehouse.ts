@@ -7,6 +7,7 @@ interface UpdateWarehouseBody {
   countVarianceApprovalThreshold?: number;
   periodLockedBefore?: string | null;
   printMultipleTickets?: boolean;
+  receiptPaperWidth?: "80mm" | "58mm";
 }
 
 const SETTINGS_SELECT = {
@@ -16,6 +17,7 @@ const SETTINGS_SELECT = {
   countVarianceApprovalThreshold: true,
   periodLockedBefore: true,
   printMultipleTickets: true,
+  receiptPaperWidth: true,
 } as const;
 
 const LETTERHEAD_SELECT = {
@@ -29,6 +31,7 @@ const LETTERHEAD_SELECT = {
   // endpoint and it needs to be readable by clerks (not just owner/manager)
   // to decide the counter screen's button label before an order is placed.
   printMultipleTickets: true,
+  receiptPaperWidth: true,
 } as const;
 
 export default async function warehouseRoutes(app: FastifyInstance) {
@@ -60,6 +63,10 @@ export default async function warehouseRoutes(app: FastifyInstance) {
       const warehouseId = request.user.warehouseId;
       const body = request.body ?? {};
 
+      if (body.receiptPaperWidth && body.receiptPaperWidth !== "80mm" && body.receiptPaperWidth !== "58mm") {
+        return reply.code(400).send({ message: "receiptPaperWidth must be either '80mm' or '58mm'" });
+      }
+
       const before = await prisma.warehouse.findUniqueOrThrow({
         where: { id: warehouseId },
         select: SETTINGS_SELECT,
@@ -77,6 +84,7 @@ export default async function warehouseRoutes(app: FastifyInstance) {
                 ? null
                 : new Date(body.periodLockedBefore),
           printMultipleTickets: body.printMultipleTickets,
+          receiptPaperWidth: body.receiptPaperWidth,
         },
         select: SETTINGS_SELECT,
       });

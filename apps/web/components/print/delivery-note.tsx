@@ -13,9 +13,10 @@ const METHOD_LABEL: Record<string, string> = {
 export function DeliveryNote({ data, printCount }: { data: PrintData; printCount: number }) {
   const { issue, customer, warehouse, oldestUnpaid } = data;
   const totalQty = issue.lines.reduce((sum, l) => sum + Number(l.qty), 0);
+  const paperClass = warehouse.receiptPaperWidth === "58mm" ? "paper-58mm" : "paper-80mm";
 
   return (
-    <div className="receipt">
+    <div className={`receipt ${paperClass}`}>
       {printCount > 1 && <p className="center bold">*** REPRINT — COPY {printCount} ***</p>}
 
       <div className="center">

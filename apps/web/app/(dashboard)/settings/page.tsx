@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const [countVarianceApprovalThreshold, setCountVarianceApprovalThreshold] = useState("");
   const [periodLockedBefore, setPeriodLockedBefore] = useState("");
   const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
+  const [receiptPaperWidth, setReceiptPaperWidth] = useState<"80mm" | "58mm">("80mm");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export default function SettingsPage() {
         setCountVarianceApprovalThreshold(w.countVarianceApprovalThreshold);
         setPeriodLockedBefore(w.periodLockedBefore ? w.periodLockedBefore.slice(0, 10) : "");
         setPrintMultipleTickets(w.printMultipleTickets);
+        setReceiptPaperWidth(w.receiptPaperWidth === "58mm" ? "58mm" : "80mm");
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."))
       .finally(() => setLoading(false));
@@ -50,6 +52,7 @@ export default function SettingsPage() {
           countVarianceApprovalThreshold: Number(countVarianceApprovalThreshold),
           periodLockedBefore: periodLockedBefore || null,
           printMultipleTickets,
+          receiptPaperWidth,
         }),
       });
       setSaved(true);
@@ -130,6 +133,40 @@ export default function SettingsPage() {
             onChange={setPrintMultipleTickets}
             label="Print a separate ticket per item"
           />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Receipt paper width</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              Choose the thermal roll size of your receipt printer. Standard countertop POS printers use 80 mm;
+              compact or portable mobile wireless printers use 58 mm.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center rounded-lg border border-border bg-surface p-0.5">
+            <button
+              type="button"
+              onClick={() => setReceiptPaperWidth("80mm")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                receiptPaperWidth === "80mm"
+                  ? "bg-paper text-ink shadow-sm"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              80 mm (Standard)
+            </button>
+            <button
+              type="button"
+              onClick={() => setReceiptPaperWidth("58mm")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                receiptPaperWidth === "58mm"
+                  ? "bg-paper text-ink shadow-sm"
+                  : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              58 mm (Compact)
+            </button>
+          </div>
         </div>
       </div>
 

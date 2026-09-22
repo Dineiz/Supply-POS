@@ -41,8 +41,31 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
 
   useEffect(() => {
     if (data && printCount !== null) {
-      const timer = setTimeout(() => window.print(), 150);
-      return () => clearTimeout(timer);
+      let cancelled = false;
+      const triggerPrint = () => {
+        if (!cancelled) {
+          window.print();
+        }
+      };
+
+      if (typeof document !== "undefined" && "fonts" in document) {
+        document.fonts.ready
+          .then(() => {
+            requestAnimationFrame(() => {
+              setTimeout(triggerPrint, 150);
+            });
+          })
+          .catch(() => {
+            setTimeout(triggerPrint, 250);
+          });
+      } else {
+        const timer = setTimeout(triggerPrint, 250);
+        return () => clearTimeout(timer);
+      }
+
+      return () => {
+        cancelled = true;
+      };
     }
   }, [data, printCount]);
 
@@ -58,8 +81,13 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
     return <p className="p-6 text-center text-sm text-ink-muted">Preparing receipt…</p>;
   }
 
+  const is58mm = data.warehouse.receiptPaperWidth === "58mm";
+  const paperClass = is58mm ? "paper-58mm" : "paper-80mm";
+  const pageCss = `@media print { @page { size: ${is58mm ? "58mm" : "80mm"} auto; margin: 0; } }`;
+
   return (
-    <div className="receipt-preview">
+    <div className={`receipt-preview ${paperClass}`}>
+      <style dangerouslySetInnerHTML={{ __html: pageCss }} />
       <div className="no-print mb-4 flex justify-center">
         <button
           onClick={() => window.print()}
