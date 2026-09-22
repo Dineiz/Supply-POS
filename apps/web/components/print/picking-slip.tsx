@@ -17,7 +17,7 @@ export function PickingSlip({
   return (
     <div className={`receipt ${paperClass}`}>
       <div className="center">
-        <p className="bold">*** KITCHEN ORDER TICKET (KOT) ***</p>
+        <p className="bold">*** WAREHOUSE SLIP / KOT ***</p>
         <p className="bold">{issue.issueNumber}</p>
         {ticketLabel && <p className="bold">{ticketLabel}</p>}
       </div>

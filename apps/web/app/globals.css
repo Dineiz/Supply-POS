@@ -161,6 +161,22 @@ body {
   margin-top: 2mm;
 }
 
+.cut-separator {
+  width: 72mm;
+  margin: 3mm auto;
+  text-align: center;
+}
+
+.paper-58mm .cut-separator {
+  width: 48mm;
+}
+
+.rule-cut {
+  border: none;
+  border-top: 1.5px dashed #000;
+  margin: 1mm 0;
+}
+
 @media screen {
   .receipt-preview {
     background: var(--color-surface);
