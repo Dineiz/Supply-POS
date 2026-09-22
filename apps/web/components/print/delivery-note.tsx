@@ -114,7 +114,7 @@ export function DeliveryNote({ data, printCount }: { data: PrintData; printCount
         <span>Given by</span>
       </div>
 
-      <p className="center" style={{ marginTop: "4mm" }}>
+      <p className="center" style={{ marginTop: "1.5mm" }}>
         Powered by Dineiz
       </p>
     </div>

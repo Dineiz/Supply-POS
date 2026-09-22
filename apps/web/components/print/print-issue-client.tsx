@@ -56,7 +56,7 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
     let cancelled = false;
 
     const is58mm = data.warehouse.receiptPaperWidth === "58mm";
-    const widthMm = is58mm ? "58mm" : "80mm";
+    const widthMm = is58mm ? 58 : 80;
 
     const measureAndPrint = () => {
       if (cancelled) return;
@@ -66,6 +66,7 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
       if (ticketEls.length === 0) return;
 
       let css = `@media print {\n`;
+      css += `  @page { margin: 0; }\n`;
       css += `  html, body { margin: 0; padding: 0; background: transparent; }\n`;
       css += `  .no-print { display: none !important; }\n`;
       css += `  .receipt-preview { padding: 0; margin: 0; background: transparent; }\n`;
@@ -73,12 +74,16 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
       ticketEls.forEach((el, index) => {
         const rect = el.getBoundingClientRect();
         const heightPx = Math.max(el.scrollHeight, el.offsetHeight, rect.height);
-        // Convert px to mm: px * 25.4 / 96 + 4mm safety buffer so thermal cutter never clips text
-        const heightMm = Math.ceil((heightPx * 25.4) / 96) + 4;
+        // Convert px to mm: px * 25.4 / 96 + 1.5mm subpixel buffer
+        const rawHeightMm = Math.ceil((heightPx * 25.4) / 96) + 1.5;
+        // CRITICAL: Height must be at least widthMm (80mm for 80mm roll, 58mm for 58mm roll)
+        // If width > height, Chrome and Windows GDI automatically classify the page as LANDSCAPE
+        // and rotate the print 90 degrees sideways! Keeping height >= width guarantees PORTRAIT!
+        const heightMm = Math.max(widthMm, rawHeightMm);
         const pageName = `ticketPage${index}`;
 
         css += `  @page ${pageName} {\n`;
-        css += `    size: ${widthMm} ${heightMm}mm;\n`;
+        css += `    size: ${widthMm}mm ${heightMm}mm;\n`;
         css += `    margin: 0;\n`;
         css += `  }\n`;
         css += `  .ticket-page-${index} {\n`;

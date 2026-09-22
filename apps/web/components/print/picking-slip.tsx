@@ -30,14 +30,16 @@ export function PickingSlip({
       <hr className="rule-light" />
 
       <div className="line-cols bold" style={{ marginBottom: "1mm" }}>
-        <span>ITEM</span>
+        <span style={{ width: "7mm" }}></span>
+        <span style={{ flex: 1 }}>ITEM</span>
         <span style={{ textAlign: "right" }}>QTY</span>
       </div>
       <hr className="rule-light" />
 
       {displayLines.map((line) => (
-        <div key={line.id} className="line-cols" style={{ marginBottom: "2mm", alignItems: "baseline" }}>
-          <span className="bold" style={{ flex: 1, paddingRight: "2mm" }}>
+        <div key={line.id} className="line-cols" style={{ marginBottom: "1.5mm", alignItems: "baseline" }}>
+          <span style={{ width: "7mm", fontFamily: "monospace", fontWeight: "bold" }}>[&nbsp;&nbsp;]</span>
+          <span className="bold" style={{ flex: 1, paddingRight: "1mm" }}>
             {line.itemName.toUpperCase()}
           </span>
           <span className="bold" style={{ whiteSpace: "nowrap", textAlign: "right" }}>

@@ -152,13 +152,13 @@ body {
 .receipt .signatures {
   display: flex;
   justify-content: space-between;
-  margin-top: 8mm;
+  margin-top: 3mm;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 .receipt.paper-58mm .signatures {
-  margin-top: 5mm;
+  margin-top: 2mm;
 }
 
 @media screen {
@@ -170,10 +170,10 @@ body {
   .receipt {
     border: 1px solid var(--color-border-strong);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-    padding: 6mm 4mm;
+    padding: 4mm 3mm;
   }
   .receipt.paper-58mm {
-    padding: 4mm 3mm;
+    padding: 3mm 2mm;
   }
 }
 
@@ -184,12 +184,12 @@ body {
   .receipt.paper-58mm {
     width: 48mm;
     margin: 0 auto;
-    padding: 6mm 1.5mm 3mm 1.5mm;
+    padding: 2mm 1.5mm 1mm 1.5mm;
   }
   .receipt.paper-80mm {
     width: 72mm;
     margin: 0 auto;
-    padding: 6mm 2mm 3mm 2mm;
+    padding: 2mm 2mm 1mm 2mm;
   }
   html,
   body {
