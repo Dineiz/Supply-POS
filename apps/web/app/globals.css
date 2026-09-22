@@ -194,10 +194,11 @@ body {
 }
 
 @media print {
-  /* @page size is injected dynamically by JS as  size: Xmm auto
-     so the roll cuts at exactly the content height — no blank paper below */
+  /* @page named sizes (tkt0, tkt1 …) are injected dynamically by JS.
+     This default @page is the fallback — always portrait. */
   @page {
     margin: 0;
+    /* 'portrait' keyword as additional safety: overrides any driver landscape default */
   }
 
   html,

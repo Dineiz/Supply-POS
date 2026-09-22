@@ -22,10 +22,15 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
 
   els.forEach((el, i) => {
     const heightPx = Math.max(el.scrollHeight, el.offsetHeight);
-    // add 4 mm safety so content never clips at the edge
-    const heightMm = Math.ceil((heightPx * 25.4) / 96) + 4;
+    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 4;
+    // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
+    // Enforce a portrait minimum of widthMm + 10mm. The tiny extra blank strip is
+    // invisible once the auto-cutter fires.
+    const heightMm = Math.max(widthMm + 10, rawMm);
     const name = `tkt${i}`;
 
+    // size: <width> <height> — width first, height second.
+    // Because heightMm > widthMm, Chrome treats this as portrait.
     css += `  @page ${name} { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
     css += `  .print-ticket-${i} {\n`;
     css += `    page: ${name};\n`;
