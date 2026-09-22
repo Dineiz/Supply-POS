@@ -194,9 +194,37 @@ body {
 }
 
 @media print {
+  /* @page size is injected dynamically by JS as  size: Xmm auto
+     so the roll cuts at exactly the content height — no blank paper below */
   @page {
     margin: 0;
   }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .receipt-preview {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+  }
+
+  .receipt {
+    box-shadow: none !important;
+    border: none !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* print widths — these are fallbacks; JS also sets html width */
   .receipt.paper-58mm {
     width: 48mm;
     margin: 0 auto;
@@ -206,30 +234,6 @@ body {
     width: 72mm;
     margin: 0 auto;
     padding: 2mm 2mm 1mm 2mm;
-  }
-  html,
-  body {
-    margin: 0;
-    padding: 0;
-    background: transparent;
-  }
-  .no-print {
-    display: none !important;
-  }
-  .receipt-preview {
-    padding: 0;
-    margin: 0;
-    background: transparent;
-  }
-  .receipt {
-    box-shadow: none;
-    border: none;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-  .print-ticket-page + .print-ticket-page {
-    page-break-before: always;
-    break-before: page;
   }
 }
 
