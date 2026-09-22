@@ -52,7 +52,7 @@ body {
 .receipt {
   width: 72mm;
   margin: 0 auto;
-  padding: 3mm 0;
+  padding: 6mm 2mm 3mm 2mm;
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
@@ -63,7 +63,7 @@ body {
 /* 58mm compact thermal roll formatting */
 .receipt.paper-58mm {
   width: 48mm;
-  padding: 2mm 0;
+  padding: 5mm 1.5mm 2mm 1.5mm;
   font-size: 9.5px;
   line-height: 1.35;
 }
@@ -191,13 +191,13 @@ body {
     page: receipt58;
     width: 48mm;
     margin: 0 auto;
-    padding: 2mm 1mm;
+    padding: 6mm 1.5mm 3mm 1.5mm;
   }
   .receipt.paper-80mm {
     page: receipt80;
     width: 72mm;
     margin: 0 auto;
-    padding: 2mm 2mm;
+    padding: 6mm 2mm 3mm 2mm;
   }
   html,
   body {

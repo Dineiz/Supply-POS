@@ -11,7 +11,6 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
   const [data, setData] = useState<PrintData | null>(null);
   const [printCount, setPrintCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showPickingSlip, setShowPickingSlip] = useState(false);
 
   useEffect(() => {
     function handleAfterPrint() {
@@ -104,17 +103,8 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
           onClick={() => window.print()}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
-          Print receipt
+          Print again
         </button>
-        {!data.warehouse.printMultipleTickets && (
-          <button
-            type="button"
-            onClick={() => setShowPickingSlip((prev) => !prev)}
-            className="rounded-md border border-border bg-paper px-3 py-2 text-sm font-medium text-ink hover:bg-surface"
-          >
-            {showPickingSlip ? "Hide picking slip" : "+ Add warehouse picking slip"}
-          </button>
-        )}
       </div>
       <DeliveryNote data={data} printCount={printCount} />
       {data.warehouse.printMultipleTickets ? (
@@ -123,15 +113,15 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
             <PickingSlip
               data={data}
               lines={[line]}
-              ticketLabel={`TICKET ${i + 1} OF ${data.issue.lines.length}`}
+              ticketLabel={`KOT ${i + 1} OF ${data.issue.lines.length}`}
             />
           </div>
         ))
-      ) : showPickingSlip ? (
+      ) : (
         <div className="print-ticket-page">
           <PickingSlip data={data} />
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
