@@ -10,53 +10,47 @@ export function PickingSlip({
   lines?: PrintLine[];
   ticketLabel?: string;
 }) {
-  const { issue, customer, warehouse, perishableGuidance } = data;
+  const { issue, customer, warehouse } = data;
   const displayLines = lines ?? issue.lines;
   const paperClass = warehouse.receiptPaperWidth === "58mm" ? "paper-58mm" : "paper-80mm";
 
   return (
     <div className={`receipt ${paperClass}`}>
       <div className="center">
-        <p className="bold">** KOT / PICKING SLIP **</p>
-        <p>{issue.issueNumber}</p>
-        {ticketLabel && <p>{ticketLabel}</p>}
+        <p className="bold">*** KITCHEN ORDER TICKET (KOT) ***</p>
+        <p className="bold">{issue.issueNumber}</p>
+        {ticketLabel && <p className="bold">{ticketLabel}</p>}
       </div>
       <hr className="rule-heavy" />
-      <p className="bold">{customer.name.toUpperCase()}</p>
-      <p>
-        {formatDate(issue.issuedAt)} · {formatTime(issue.issuedAt)}
-      </p>
+      <div className="line-cols">
+        <span className="bold">Customer: {customer.name.toUpperCase()}</span>
+        <span>{formatTime(issue.issuedAt)}</span>
+      </div>
+      <p style={{ fontSize: "9.5px", color: "#444", marginTop: "0.5mm" }}>Date: {formatDate(issue.issuedAt)}</p>
       <hr className="rule-light" />
 
-      {displayLines.map((line) => {
-        const guide = line.isPerishable ? perishableGuidance[line.itemId] : undefined;
-        return (
-          <div key={line.id} style={{ marginBottom: "3mm" }}>
-            <div className="line-cols">
-              <span>[&nbsp;&nbsp;]</span>
-              <span className="bold" style={{ flex: 1, textAlign: "left", paddingLeft: "2mm" }}>
-                {formatQtyOnly(line.qty)} {line.unitCode.toLowerCase()}
-              </span>
-            </div>
-            <p className="bold" style={{ paddingLeft: "8mm" }}>
-              {line.itemName.toUpperCase()}
-            </p>
-            {line.location && <p style={{ paddingLeft: "8mm" }}>{line.location}</p>}
-            {guide && (
-              <>
-                <p style={{ paddingLeft: "8mm" }}>⚠ Take oldest crate first</p>
-                <p style={{ paddingLeft: "8mm" }}>Received {formatDate(guide.receivedAt)}</p>
-              </>
-            )}
-          </div>
-        );
-      })}
-
+      <div className="line-cols bold" style={{ marginBottom: "1mm" }}>
+        <span>ITEM</span>
+        <span style={{ textAlign: "right" }}>QTY</span>
+      </div>
       <hr className="rule-light" />
-      <p>TOTAL ITEMS: {displayLines.length}</p>
 
-      <p style={{ marginTop: "6mm" }}>Picked by : ____________</p>
-      <p style={{ marginTop: "2mm" }}>Checked by: ____________</p>
+      {displayLines.map((line) => (
+        <div key={line.id} className="line-cols" style={{ marginBottom: "2mm", alignItems: "baseline" }}>
+          <span className="bold" style={{ flex: 1, paddingRight: "2mm" }}>
+            {line.itemName.toUpperCase()}
+          </span>
+          <span className="bold" style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+            {formatQtyOnly(line.qty)} {line.unitCode.toLowerCase()}
+          </span>
+        </div>
+      ))}
+
+      <hr className="rule-heavy" />
+      <div className="line-cols bold">
+        <span>TOTAL ITEMS</span>
+        <span style={{ textAlign: "right" }}>{displayLines.length}</span>
+      </div>
     </div>
   );
 }
