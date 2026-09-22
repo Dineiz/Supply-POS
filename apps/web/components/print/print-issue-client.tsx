@@ -11,6 +11,17 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
   const [data, setData] = useState<PrintData | null>(null);
   const [printCount, setPrintCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPickingSlip, setShowPickingSlip] = useState(false);
+
+  useEffect(() => {
+    function handleAfterPrint() {
+      if (typeof window !== "undefined" && window.opener) {
+        window.close();
+      }
+    }
+    window.addEventListener("afterprint", handleAfterPrint);
+    return () => window.removeEventListener("afterprint", handleAfterPrint);
+  }, []);
 
   useEffect(() => {
     if (!getToken()) {
@@ -83,24 +94,32 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
 
   const is58mm = data.warehouse.receiptPaperWidth === "58mm";
   const paperClass = is58mm ? "paper-58mm" : "paper-80mm";
-  const pageCss = `@media print { @page { size: ${is58mm ? "58mm" : "80mm"} auto; margin: 0; } }`;
+  const pageCss = `@media print { @page { margin: 0; } html, body { margin: 0; padding: 0; } }`;
 
   return (
     <div className={`receipt-preview ${paperClass}`}>
       <style dangerouslySetInnerHTML={{ __html: pageCss }} />
-      <div className="no-print mb-4 flex justify-center">
+      <div className="no-print mb-4 flex items-center justify-center gap-2">
         <button
           onClick={() => window.print()}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
-          Print again
+          Print receipt
         </button>
+        {!data.warehouse.printMultipleTickets && (
+          <button
+            type="button"
+            onClick={() => setShowPickingSlip((prev) => !prev)}
+            className="rounded-md border border-border bg-paper px-3 py-2 text-sm font-medium text-ink hover:bg-surface"
+          >
+            {showPickingSlip ? "Hide picking slip" : "+ Add warehouse picking slip"}
+          </button>
+        )}
       </div>
       <DeliveryNote data={data} printCount={printCount} />
       {data.warehouse.printMultipleTickets ? (
         data.issue.lines.map((line, i) => (
-          <div key={line.id}>
-            <div style={{ height: "8mm" }} />
+          <div key={line.id} className="print-ticket-page">
             <PickingSlip
               data={data}
               lines={[line]}
@@ -108,12 +127,11 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
             />
           </div>
         ))
-      ) : (
-        <>
-          <div style={{ height: "8mm" }} />
+      ) : showPickingSlip ? (
+        <div className="print-ticket-page">
           <PickingSlip data={data} />
-        </>
-      )}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -179,28 +179,30 @@ body {
 
 @media print {
   @page {
-    size: 80mm auto;
     margin: 0;
   }
   @page receipt80 {
-    size: 80mm auto;
     margin: 0;
   }
   @page receipt58 {
-    size: 58mm auto;
     margin: 0;
   }
   .receipt.paper-58mm {
     page: receipt58;
-    padding: 2mm 2mm;
+    width: 48mm;
+    margin: 0 auto;
+    padding: 2mm 1mm;
   }
   .receipt.paper-80mm {
     page: receipt80;
-    padding: 3mm 4mm;
+    width: 72mm;
+    margin: 0 auto;
+    padding: 2mm 2mm;
   }
   html,
   body {
     margin: 0;
+    padding: 0;
     background: #fff;
   }
   .no-print {
@@ -208,18 +210,18 @@ body {
   }
   .receipt-preview {
     padding: 0;
+    margin: 0;
     background: #fff;
   }
   .receipt {
     box-shadow: none;
     border: none;
-    padding: 3mm 4mm;
-    page-break-after: always;
-    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
-  .receipt:last-child {
-    page-break-after: auto;
-    break-after: auto;
+  .print-ticket-page {
+    page-break-before: always;
+    break-before: page;
   }
 }
 
