@@ -181,20 +181,12 @@ body {
   @page {
     margin: 0;
   }
-  @page receipt80 {
-    margin: 0;
-  }
-  @page receipt58 {
-    margin: 0;
-  }
   .receipt.paper-58mm {
-    page: receipt58;
     width: 48mm;
     margin: 0 auto;
     padding: 6mm 1.5mm 3mm 1.5mm;
   }
   .receipt.paper-80mm {
-    page: receipt80;
     width: 72mm;
     margin: 0 auto;
     padding: 6mm 2mm 3mm 2mm;
@@ -203,7 +195,7 @@ body {
   body {
     margin: 0;
     padding: 0;
-    background: #fff;
+    background: transparent;
   }
   .no-print {
     display: none !important;
@@ -211,7 +203,7 @@ body {
   .receipt-preview {
     padding: 0;
     margin: 0;
-    background: #fff;
+    background: transparent;
   }
   .receipt {
     box-shadow: none;
@@ -219,7 +211,7 @@ body {
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  .print-ticket-page {
+  .print-ticket-page + .print-ticket-page {
     page-break-before: always;
     break-before: page;
   }
