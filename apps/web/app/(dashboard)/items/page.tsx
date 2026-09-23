@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authFetch, ApiError } from "@/lib/api";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatUnitCode } from "@/lib/format";
 import type { Category, Item } from "@/lib/types";
 
 export default function ItemsPage() {
@@ -137,7 +137,7 @@ export default function ItemsPage() {
                     <Link href={`/items/${item.id}`} className="font-medium text-ink hover:text-accent">
                       {item.name}
                     </Link>
-                    {item.nameUrdu && <p className="text-xs text-ink-faint">{item.nameUrdu}</p>}
+                    {item.nameUrdu && <p className="text-xs text-accent font-urdu font-semibold">{item.nameUrdu}</p>}
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{item.category?.name ?? "—"}</td>
                   <td
@@ -145,7 +145,7 @@ export default function ItemsPage() {
                       isOut ? "text-danger" : isLow ? "text-warning" : "text-ink"
                     }`}
                   >
-                    {stock} {item.unitCode.toLowerCase()}
+                    {stock} {formatUnitCode(item.unitCode)}
                   </td>
                   <td className="font-tabular px-4 py-3 text-right text-ink-muted">{formatMoney(cost)}</td>
                   <td className="font-tabular px-4 py-3 text-right text-ink">{formatMoney(price)}</td>

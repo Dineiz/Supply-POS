@@ -47,6 +47,7 @@ export const useCounterStore = create<CounterState>((set, get) => ({
         {
           itemId: item.id,
           name: item.name,
+          nameUrdu: item.nameUrdu,
           unitCode: item.unitCode,
           qty: 1,
           step: fractional ? 0.5 : 1,

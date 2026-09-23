@@ -115,6 +115,7 @@ async function main() {
       address: "Plot 42, Site Area, Karachi",
       phone: "0300-1234567",
       ntn: "1234567-8",
+      logoUrl: "https://res.cloudinary.com/djgb5kajo/image/upload/v1790117101/copy_of_shakeel_logo_page-0001.jpg",
     },
   });
 
@@ -235,6 +236,7 @@ async function main() {
     data: {
       warehouseId: warehouse.id,
       name: "Sugar (Refined)",
+      nameUrdu: "چینی (ریفائنڈ)",
       categoryId: catGrocery.id,
       purchaseUnitId: bag50.id,
       sellUnitId: kg.id,
@@ -318,6 +320,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Cooking Oil (Dalda)",
+    nameUrdu: "کوکنگ آئل (ڈالڈا)",
     categoryId: catOil.id,
     purchaseUnitId: bottle5l.id,
     sellUnitId: l.id,
@@ -331,6 +334,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Tomato (Fresh)",
+    nameUrdu: "تازہ ٹماٹر",
     categoryId: catVeg.id,
     purchaseUnitId: kg.id,
     sellUnitId: kg.id,
@@ -348,6 +352,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Onion",
+    nameUrdu: "پیاز",
     categoryId: catVeg.id,
     purchaseUnitId: kg.id,
     sellUnitId: kg.id,
@@ -365,6 +370,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Basmati Rice",
+    nameUrdu: "باسمتی چاول",
     categoryId: catGrocery.id,
     purchaseUnitId: bag50.id,
     sellUnitId: kg.id,
@@ -378,6 +384,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Red Chilli Powder",
+    nameUrdu: "لال مرچ پاؤڈر",
     categoryId: catSpices.id,
     purchaseUnitId: kg.id,
     sellUnitId: kg.id,
@@ -392,6 +399,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Wheat Flour (Atta)",
+    nameUrdu: "گندم کا آٹا",
     categoryId: catGrocery.id,
     purchaseUnitId: bag20.id,
     sellUnitId: kg.id,
@@ -405,6 +413,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Salt",
+    nameUrdu: "نمک",
     categoryId: catGrocery.id,
     purchaseUnitId: bag25.id,
     sellUnitId: kg.id,
@@ -418,6 +427,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Milk (Fresh)",
+    nameUrdu: "تازہ دودھ",
     categoryId: catDairy.id,
     purchaseUnitId: l.id,
     sellUnitId: l.id,
@@ -435,6 +445,7 @@ async function main() {
   await createItemWithOpeningStock({
     warehouseId: warehouse.id,
     name: "Black Pepper (Whole)",
+    nameUrdu: "ثابت کالی مرچ",
     categoryId: catSpices.id,
     purchaseUnitId: kg.id,
     sellUnitId: kg.id,

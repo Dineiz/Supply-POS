@@ -208,6 +208,7 @@ export interface PrintData {
     address: string | null;
     phone: string | null;
     ntn: string | null;
+    logoUrl?: string | null;
     currency: string;
     defaultReturnWindowHours: number;
     printMultipleTickets: boolean;
@@ -569,6 +570,7 @@ export interface CustomerStatement {
 export interface CartLine {
   itemId: string;
   name: string;
+  nameUrdu?: string | null;
   unitCode: string;
   qty: number;
   /** How much +/- moves qty by: 1 for count items, 0.5 for weight/volume. */

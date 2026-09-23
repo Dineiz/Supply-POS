@@ -146,6 +146,7 @@ export default async function issueRoutes(app: FastifyInstance) {
           address: warehouse.address,
           phone: warehouse.phone,
           ntn: warehouse.ntn,
+          logoUrl: warehouse.logoUrl,
           currency: warehouse.currency,
           defaultReturnWindowHours: warehouse.defaultReturnWindowHours,
           printMultipleTickets: warehouse.printMultipleTickets,

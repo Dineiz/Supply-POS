@@ -7,6 +7,32 @@ import { authFetch, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
 import type { PrintData } from "@/lib/types";
 
+async function waitForImagesAndFonts(els: HTMLElement[]): Promise<void> {
+  const imgs: HTMLImageElement[] = [];
+  els.forEach((el) => {
+    imgs.push(...Array.from(el.querySelectorAll("img")));
+  });
+
+  const imgPromises = imgs.map(
+    (img) =>
+      new Promise<void>((resolve) => {
+        if (img.complete && img.naturalHeight !== 0) {
+          resolve();
+        } else {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        }
+      })
+  );
+
+  const fontPromise =
+    typeof document !== "undefined" && "fonts" in document
+      ? document.fonts.ready
+      : Promise.resolve();
+
+  await Promise.all([...imgPromises, fontPromise]);
+}
+
 // -------------------------------------------------------------------
 // Measure every ticket element and generate a named @page rule for each
 // so each page is exactly as tall as its content — no trailing blank paper.
@@ -18,14 +44,14 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
   css += `  html, body { margin:0!important; padding:0!important; background:transparent!important; }\n`;
   css += `  .no-print { display:none!important; }\n`;
   css += `  .receipt-preview { padding:0!important; margin:0!important; background:transparent!important; }\n`;
-  css += `  .receipt { box-shadow:none!important; border:none!important; }\n`;
+  css += `  .receipt { box-shadow:none!important; border:none!important; break-inside:avoid!important; page-break-inside:avoid!important; }\n`;
 
   els.forEach((el, i) => {
-    const heightPx = Math.max(el.scrollHeight, el.offsetHeight);
-    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 4;
+    const heightPx = Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height);
+    // Add a safe 14mm bottom buffer so minor print-rendering variations never cause a 2nd page break
+    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 14;
     // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
-    // Enforce a portrait minimum of widthMm + 10mm. The tiny extra blank strip is
-    // invisible once the auto-cutter fires.
+    // Enforce a portrait minimum of widthMm + 10mm.
     const heightMm = Math.max(widthMm + 10, rawMm);
     const name = `tkt${i}`;
 
@@ -103,7 +129,7 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
   }, [issueId]);
 
   /* ── collect refs, measure, inject styles, print ── */
-  function triggerPrint(pd: PrintData) {
+  async function triggerPrint(pd: PrintData) {
     const widthMm = pd.warehouse.receiptPaperWidth === "58mm" ? 58 : 80;
     const els: HTMLElement[] = [];
     let i = 0;
@@ -112,8 +138,15 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
       i++;
     }
     if (els.length === 0) return; // DOM not ready yet
-    injectTicketStyles(els, widthMm);
-    requestAnimationFrame(() => setTimeout(() => window.print(), 120));
+
+    await waitForImagesAndFonts(els);
+
+    requestAnimationFrame(() => {
+      injectTicketStyles(els, widthMm);
+      requestAnimationFrame(() => {
+        setTimeout(() => window.print(), 150);
+      });
+    });
   }
 
   /* ── auto-print when data arrives ── */
@@ -121,15 +154,9 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
     if (!data || printCount === null) return;
     const pd = data;
 
-    const go = () => triggerPrint(pd);
-
     const t = setTimeout(() => {
-      if (typeof document !== "undefined" && "fonts" in document) {
-        document.fonts.ready.then(go).catch(go);
-      } else {
-        go();
-      }
-    }, 250); // wait for React to paint all ticket divs
+      triggerPrint(pd);
+    }, 150);
 
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps

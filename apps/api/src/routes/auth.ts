@@ -27,7 +27,7 @@ export default async function authRoutes(app: FastifyInstance) {
 
       if (pin) {
         const candidates = await prisma.user.findMany({
-          where: { role: "CLERK", isActive: true, pinHash: { not: null } },
+          where: { isActive: true, pinHash: { not: null } },
         });
         for (const candidate of candidates) {
           if (candidate.pinHash && (await bcrypt.compare(pin, candidate.pinHash))) {
@@ -38,7 +38,10 @@ export default async function authRoutes(app: FastifyInstance) {
       }
 
       if (email && password) {
-        const user = await prisma.user.findFirst({ where: { email, isActive: true } });
+        const cleanEmail = email.trim();
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: cleanEmail, mode: "insensitive" }, isActive: true },
+        });
         if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
           return reply.code(401).send({ message: "Incorrect email or password." });
         }

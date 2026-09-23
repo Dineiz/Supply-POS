@@ -14,7 +14,7 @@ import { ReturnModal } from "@/components/counter/return-modal";
 import { authFetch, ApiError } from "@/lib/api";
 import { getSessionUser, getToken, clearSession, type SessionUser } from "@/lib/session";
 import { useCounterStore } from "@/lib/store";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatUnitCode } from "@/lib/format";
 import type { Item } from "@/lib/types";
 
 interface IssueResult {
@@ -191,9 +191,14 @@ export default function CounterPage() {
       {lines.map((line) => (
         <div key={line.itemId} className="flex items-center justify-between gap-3 border-b border-border py-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-ink">{line.name}</p>
-            <p className="font-tabular text-xs text-ink-muted">
-              {formatMoney(line.unitPrice)}/{line.unitCode.toLowerCase()} = {formatMoney(line.qty * line.unitPrice)}
+            <p className="truncate text-sm font-semibold text-ink">{line.name}</p>
+            {line.nameUrdu && (
+              <p className="font-urdu text-sm font-bold text-accent" dir="rtl">
+                {line.nameUrdu}
+              </p>
+            )}
+            <p className="font-tabular mt-0.5 text-xs text-ink-muted">
+              {formatMoney(line.unitPrice)}/{formatUnitCode(line.unitCode)} = {formatMoney(line.qty * line.unitPrice)}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -460,16 +465,23 @@ export default function CounterPage() {
                           : "cursor-pointer border-border bg-paper hover:border-accent active:border-accent active:bg-surface-hover"
                   }`}
                 >
-                  <p className="text-base font-semibold leading-snug text-ink">{item.name}</p>
+                  <div className="w-full">
+                    <p className="text-base font-bold leading-snug text-ink">{item.name}</p>
+                    {item.nameUrdu && (
+                      <p className="font-urdu mt-0.5 text-lg font-bold text-accent leading-normal" dir="rtl">
+                        {item.nameUrdu}
+                      </p>
+                    )}
+                  </div>
                   <p className="font-tabular mt-1.5 text-sm font-medium text-ink-muted">
-                    {formatMoney(item.price)}/{item.unitCode.toLowerCase()}
+                    {formatMoney(item.price)}/{formatUnitCode(item.unitCode)}
                   </p>
                   <p
                     className={`font-tabular mt-2 text-sm font-medium ${
                       isOut ? "text-danger" : isLow ? "text-warning" : "text-ink-faint"
                     }`}
                   >
-                    {isOut ? "Out of stock" : `${isLow ? "⚠ " : ""}${stock} ${item.unitCode.toLowerCase()}`}
+                    {isOut ? "Out of stock" : `${isLow ? "⚠ " : ""}${stock} ${formatUnitCode(item.unitCode)}`}
                   </p>
                   {cartLine && (
                     <div className="mt-3">

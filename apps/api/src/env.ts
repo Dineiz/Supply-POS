@@ -23,8 +23,19 @@ if (!process.env.DATABASE_URL && isProduction) {
 }
 
 // Accepts CORS_ORIGINS or CORS_ORIGIN (comma-separated in production)
-const rawCors = process.env.CORS_ORIGINS ?? process.env.CORS_ORIGIN ?? "http://localhost:3000";
-export const CORS_ORIGIN = rawCors
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const rawCors = process.env.CORS_ORIGINS ?? process.env.CORS_ORIGIN ?? "http://localhost:3000,http://localhost:3001,http://localhost:3005";
+export const CORS_ORIGIN = isProduction
+  ? rawCors
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  : (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
+      // In development, allow requests with no origin or from any localhost port
+      if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        cb(null, true);
+        return;
+      }
+      const allowed = rawCors.split(",").map((o) => o.trim());
+      cb(null, allowed.includes(origin));
+    };
+

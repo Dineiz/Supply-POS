@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatQtyOnly } from "@/lib/format";
+import { formatQtyOnly, formatUnitCode } from "@/lib/format";
 
 export function QtyStepper({
   qty,
@@ -79,7 +79,7 @@ export function QtyStepper({
             compact ? "min-w-[2.75rem] text-xs" : "min-w-[3.5rem] text-sm"
           }`}
         >
-          {formatQtyOnly(qty)} {unitCode.toLowerCase()}
+          {formatQtyOnly(qty)} {formatUnitCode(unitCode)}
         </button>
       )}
       <button
