@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { DeliveryNote } from "./delivery-note";
+import { PickingSlip } from "./picking-slip";
 import { authFetch, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
 import type { PrintData } from "@/lib/types";
@@ -47,8 +48,8 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
 
   els.forEach((el, i) => {
     const heightPx = Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height);
-    // Add a safe 14mm bottom buffer so minor print-rendering variations never cause a 2nd page break
-    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 14;
+    // Add a safe 22mm bottom buffer so minor print-rendering variations never cause a 2nd page break
+    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 22;
     // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
     // Enforce a portrait minimum of widthMm + 10mm.
     const heightMm = Math.max(widthMm + 10, rawMm);
@@ -176,15 +177,34 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
   const paperClass = is58mm ? "paper-58mm" : "paper-80mm";
 
   // ── Build the ordered list of ticket nodes ──────────────────────
-  // Only the sales receipt (Delivery Note) is printed.
-  // The warehouse KOT slip is intentionally omitted so the Dineiz
-  // branded footer appears on the sales receipt and no separate slip prints.
+  // Index 0 = Delivery Note / Bill (with Dineiz footer)
+  // Index 1..N = Warehouse KOT slip(s)
   const tickets: { id: string; node: React.ReactNode }[] = [];
 
   tickets.push({
     id: "bill",
     node: <DeliveryNote data={data} printCount={printCount} />,
   });
+
+  if (data.warehouse.printMultipleTickets) {
+    data.issue.lines.forEach((line, i) => {
+      tickets.push({
+        id: `kot-${line.id}`,
+        node: (
+          <PickingSlip
+            data={data}
+            lines={[line]}
+            ticketLabel={`KOT ${i + 1} / ${data.issue.lines.length}`}
+          />
+        ),
+      });
+    });
+  } else {
+    tickets.push({
+      id: "kot",
+      node: <PickingSlip data={data} />,
+    });
+  }
 
   return (
     <div className={`receipt-preview ${paperClass}`}>

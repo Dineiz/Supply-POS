@@ -262,6 +262,8 @@ body {
   margin-top: 2.5mm;
   padding-top: 1.5mm;
   border-top: 1px dashed #000;
+  break-before: avoid;
+  page-break-before: avoid;
   break-inside: avoid;
   page-break-inside: avoid;
 }
