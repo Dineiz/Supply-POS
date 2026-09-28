@@ -15,6 +15,7 @@ interface CounterState {
   incrementLine: (itemId: string) => void;
   decrementLine: (itemId: string) => void;
   setLineQty: (itemId: string, qty: number) => void;
+  setLineUnitPrice: (itemId: string, unitPrice: number) => void;
   removeLine: (itemId: string) => void;
   clearCart: () => void;
 }
@@ -81,6 +82,10 @@ export const useCounterStore = create<CounterState>((set, get) => ({
       return;
     }
     set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: round(qty) } : l)) });
+  },
+  setLineUnitPrice: (itemId, unitPrice) => {
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
+    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, unitPrice: round(unitPrice) } : l)) });
   },
   removeLine: (itemId) => set({ lines: get().lines.filter((l) => l.itemId !== itemId) }),
   clearCart: () => set({ lines: [], customerId: null }),

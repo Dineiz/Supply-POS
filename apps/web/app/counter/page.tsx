@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { CustomerPicker } from "@/components/counter/customer-picker";
+import { PriceEditor } from "@/components/counter/price-editor";
 import { QtyStepper } from "@/components/counter/qty-stepper";
 import { OverrideModal } from "@/components/shared/override-modal";
 import { PaymentModal } from "@/components/counter/payment-modal";
@@ -57,7 +58,7 @@ export default function CounterPage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
 
-  const { items, customers, catalogueLoaded, setCatalogue, customerId, setCustomerId, lines, addItem, incrementLine, decrementLine, setLineQty, removeLine, clearCart } =
+  const { items, customers, catalogueLoaded, setCatalogue, customerId, setCustomerId, lines, addItem, incrementLine, decrementLine, setLineQty, setLineUnitPrice, removeLine, clearCart } =
     useCounterStore();
 
   useEffect(() => {
@@ -197,8 +198,9 @@ export default function CounterPage() {
                 {line.nameUrdu}
               </p>
             )}
-            <p className="font-tabular mt-0.5 text-xs text-ink-muted">
-              {formatMoney(line.unitPrice)}/{formatUnitCode(line.unitCode)} = {formatMoney(line.qty * line.unitPrice)}
+            <p className="font-tabular mt-0.5 flex items-center gap-1 text-xs text-ink-muted">
+              <PriceEditor unitPrice={line.unitPrice} onSetPrice={(price) => setLineUnitPrice(line.itemId, price)} />
+              <span>/{formatUnitCode(line.unitCode)} = {formatMoney(line.qty * line.unitPrice)}</span>
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
