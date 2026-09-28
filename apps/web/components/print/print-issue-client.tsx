@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef } from "react";
 import { DeliveryNote } from "./delivery-note";
-import { PickingSlip } from "./picking-slip";
 import { authFetch, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
 import type { PrintData } from "@/lib/types";
@@ -177,34 +176,15 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
   const paperClass = is58mm ? "paper-58mm" : "paper-80mm";
 
   // ── Build the ordered list of ticket nodes ──────────────────────
-  // Index 0 = Delivery Note / Bill
-  // Index 1..N = Warehouse KOT slip(s)
+  // Only the sales receipt (Delivery Note) is printed.
+  // The warehouse KOT slip is intentionally omitted so the Dineiz
+  // branded footer appears on the sales receipt and no separate slip prints.
   const tickets: { id: string; node: React.ReactNode }[] = [];
 
   tickets.push({
     id: "bill",
     node: <DeliveryNote data={data} printCount={printCount} />,
   });
-
-  if (data.warehouse.printMultipleTickets) {
-    data.issue.lines.forEach((line, i) => {
-      tickets.push({
-        id: `kot-${line.id}`,
-        node: (
-          <PickingSlip
-            data={data}
-            lines={[line]}
-            ticketLabel={`KOT ${i + 1} / ${data.issue.lines.length}`}
-          />
-        ),
-      });
-    });
-  } else {
-    tickets.push({
-      id: "kot",
-      node: <PickingSlip data={data} />,
-    });
-  }
 
   return (
     <div className={`receipt-preview ${paperClass}`}>
