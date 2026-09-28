@@ -213,6 +213,7 @@ export interface PrintData {
     defaultReturnWindowHours: number;
     printMultipleTickets: boolean;
     receiptPaperWidth?: "80mm" | "58mm";
+    receiptShowRatePerUnit: boolean;
   };
   oldestUnpaid: { issueNumber: string; issuedAt: string } | null;
   perishableGuidance: Record<string, { receivedAt: string; batchNumber: string | null }>;
@@ -467,6 +468,7 @@ export interface WarehouseSettings {
   periodLockedBefore: string | null;
   printMultipleTickets: boolean;
   receiptPaperWidth?: "80mm" | "58mm";
+  receiptShowRatePerUnit: boolean;
 }
 
 export interface ReconciliationMismatch {

@@ -151,6 +151,7 @@ export default async function issueRoutes(app: FastifyInstance) {
           defaultReturnWindowHours: warehouse.defaultReturnWindowHours,
           printMultipleTickets: warehouse.printMultipleTickets,
           receiptPaperWidth: warehouse.receiptPaperWidth ?? "80mm",
+          receiptShowRatePerUnit: warehouse.receiptShowRatePerUnit,
         },
         oldestUnpaid: oldest ? { issueNumber: oldest.issueNumber, issuedAt: oldest.issuedAt } : null,
         perishableGuidance: guidance,
