@@ -34,11 +34,36 @@ async function waitForImagesAndFonts(els: HTMLElement[]): Promise<void> {
 }
 
 // -------------------------------------------------------------------
-// Measure every ticket element and generate a named @page rule for each
-// so each page is exactly as tall as its content — no trailing blank paper.
+// Measure every ticket element and generate one shared @page size for the
+// whole job. Real printers (as opposed to "Save as PDF") print a single
+// physical paper size per job — Windows has no concept of a different page
+// length mid-job, so a distinct @page size per ticket is silently ignored
+// once a real printer is selected, and the job falls back to whatever
+// length happens to be selected in the driver's paper-size list. If that
+// length is shorter than a ticket's content, that ticket's tail spills
+// onto an extra physical sheet instead of being cut cleanly — e.g. picking
+// an 80x210mm media size for a ~227mm bill produces a wasted 3rd sheet,
+// while 80x297mm fits it on one. Sizing every ticket's page to the same
+// height (the tallest ticket in this job) keeps every ticket on exactly
+// one sheet regardless of which of the driver's fixed lengths gets picked,
+// as long as it's tall enough — see the on-screen fallback note below.
 // -------------------------------------------------------------------
 function injectTicketStyles(els: HTMLElement[], widthMm: number) {
   if (typeof document === "undefined") return;
+
+  const heightsMm = els.map((el) => {
+    const heightPx = Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height);
+    // heightPx is measured while the ticket still has on-screen padding (@media screen:
+    // 4mm top + 4mm bottom for 80mm paper, 3mm+3mm for 58mm), which is taller than the
+    // @media print padding actually used when this prints (2mm+1mm / 2mm+1mm). That gap
+    // alone already over-estimates by ~5mm, so an 8mm buffer is enough slack for print
+    // rendering/font-hinting variance without padding every ticket with dead paper.
+    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 8;
+    // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
+    // Enforce a portrait minimum of widthMm + 10mm.
+    return Math.max(widthMm + 10, rawMm);
+  });
+  const heightMm = Math.max(...heightsMm);
 
   let css = `@media print {\n`;
   css += `  html, body { margin:0!important; padding:0!important; background:transparent!important; }\n`;
@@ -46,20 +71,13 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
   css += `  .receipt-preview { padding:0!important; margin:0!important; background:transparent!important; }\n`;
   css += `  .receipt { box-shadow:none!important; border:none!important; break-inside:avoid!important; page-break-inside:avoid!important; }\n`;
 
-  els.forEach((el, i) => {
-    const heightPx = Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height);
-    // Add a safe 22mm bottom buffer so minor print-rendering variations never cause a 2nd page break
-    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 22;
-    // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
-    // Enforce a portrait minimum of widthMm + 10mm.
-    const heightMm = Math.max(widthMm + 10, rawMm);
-    const name = `tkt${i}`;
+  // size: <width> <height> — width first, height second.
+  // Because heightMm > widthMm, Chrome treats this as portrait.
+  css += `  @page ticket { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
 
-    // size: <width> <height> — width first, height second.
-    // Because heightMm > widthMm, Chrome treats this as portrait.
-    css += `  @page ${name} { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
+  els.forEach((el, i) => {
     css += `  .print-ticket-${i} {\n`;
-    css += `    page: ${name};\n`;
+    css += `    page: ticket;\n`;
     if (i > 0) {
       // force a new physical page (= printer cut) before every ticket except the first
       css += `    break-before: page;\n`;
