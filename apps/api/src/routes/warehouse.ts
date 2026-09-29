@@ -8,6 +8,7 @@ interface UpdateWarehouseBody {
   periodLockedBefore?: string | null;
   printMultipleTickets?: boolean;
   receiptPaperWidth?: "80mm" | "58mm";
+  receiptShowRatePerUnit?: boolean;
 }
 
 const SETTINGS_SELECT = {
@@ -18,6 +19,7 @@ const SETTINGS_SELECT = {
   periodLockedBefore: true,
   printMultipleTickets: true,
   receiptPaperWidth: true,
+  receiptShowRatePerUnit: true,
 } as const;
 
 const LETTERHEAD_SELECT = {
@@ -32,6 +34,7 @@ const LETTERHEAD_SELECT = {
   // to decide the counter screen's button label before an order is placed.
   printMultipleTickets: true,
   receiptPaperWidth: true,
+  receiptShowRatePerUnit: true,
 } as const;
 
 export default async function warehouseRoutes(app: FastifyInstance) {
@@ -85,6 +88,7 @@ export default async function warehouseRoutes(app: FastifyInstance) {
                 : new Date(body.periodLockedBefore),
           printMultipleTickets: body.printMultipleTickets,
           receiptPaperWidth: body.receiptPaperWidth,
+          receiptShowRatePerUnit: body.receiptShowRatePerUnit,
         },
         select: SETTINGS_SELECT,
       });

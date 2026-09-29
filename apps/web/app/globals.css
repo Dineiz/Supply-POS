@@ -76,18 +76,18 @@ body {
 .receipt .rule-heavy {
   border: none;
   border-top: 2px solid #000;
-  margin: 2mm 0;
+  margin: 1.5mm 0;
 }
 .receipt.paper-58mm .rule-heavy {
-  margin: 1.5mm 0;
+  margin: 1.2mm 0;
 }
 .receipt .rule-light {
   border: none;
   border-top: 1px dashed #000;
-  margin: 1.5mm 0;
+  margin: 1.2mm 0;
 }
 .receipt.paper-58mm .rule-light {
-  margin: 1mm 0;
+  margin: 0.8mm 0;
 }
 .receipt .rule-dotted {
   border: none;
@@ -108,7 +108,7 @@ body {
   max-width: 260px;
   max-height: 90px;
   object-fit: contain;
-  margin: 0 auto 2.5mm auto;
+  margin: 0 auto 2mm auto;
   display: block;
 }
 .receipt.paper-58mm .receipt-store-logo {
@@ -195,7 +195,7 @@ body {
 
 /* ── Line item ── */
 .receipt .receipt-line-item {
-  margin-bottom: 2mm;
+  margin-bottom: 1.3mm;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -245,7 +245,7 @@ body {
 
 /* ── Signatures container ── */
 .receipt .receipt-signatures-block {
-  margin-top: 2.5mm;
+  margin-top: 1.8mm;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -259,8 +259,8 @@ body {
 /* ── Footer ("Powered by Dineiz" branded block) ── */
 .receipt .receipt-footer {
   text-align: center;
-  margin-top: 2.5mm;
-  padding-top: 1.5mm;
+  margin-top: 1.8mm;
+  padding-top: 1.2mm;
   border-top: 1px dashed #000;
   break-before: avoid;
   page-break-before: avoid;

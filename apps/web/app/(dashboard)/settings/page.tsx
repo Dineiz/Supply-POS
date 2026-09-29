@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [periodLockedBefore, setPeriodLockedBefore] = useState("");
   const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
   const [receiptPaperWidth, setReceiptPaperWidth] = useState<"80mm" | "58mm">("80mm");
+  const [receiptShowRatePerUnit, setReceiptShowRatePerUnit] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +34,7 @@ export default function SettingsPage() {
         setPeriodLockedBefore(w.periodLockedBefore ? w.periodLockedBefore.slice(0, 10) : "");
         setPrintMultipleTickets(w.printMultipleTickets);
         setReceiptPaperWidth(w.receiptPaperWidth === "58mm" ? "58mm" : "80mm");
+        setReceiptShowRatePerUnit(w.receiptShowRatePerUnit);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."))
       .finally(() => setLoading(false));
@@ -53,6 +55,7 @@ export default function SettingsPage() {
           periodLockedBefore: periodLockedBefore || null,
           printMultipleTickets,
           receiptPaperWidth,
+          receiptShowRatePerUnit,
         }),
       });
       setSaved(true);
@@ -132,6 +135,21 @@ export default function SettingsPage() {
             checked={printMultipleTickets}
             onChange={setPrintMultipleTickets}
             label="Print a separate ticket per item"
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Show rate per unit on receipt</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              The RATE column shows the price with its unit, e.g. &quot;340.00/kg&quot;, instead of a bare number.
+              Makes the rate unambiguous when a customer buys a fractional amount (e.g. 0.25 kg).
+            </p>
+          </div>
+          <Switch
+            checked={receiptShowRatePerUnit}
+            onChange={setReceiptShowRatePerUnit}
+            label="Show rate per unit on receipt"
           />
         </div>
 

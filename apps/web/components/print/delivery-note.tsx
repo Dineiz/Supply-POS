@@ -98,7 +98,10 @@ export function DeliveryNote({ data, printCount }: { data: PrintData; printCount
             <span className="col-qty">
               {formatQtyOnly(line.qty)} {formatUnitCode(line.unitCode)}
             </span>
-            <span className="col-rate">{formatMoneyPrecise(line.unitPrice)}</span>
+            <span className="col-rate">
+              {formatMoneyPrecise(line.unitPrice)}
+              {warehouse.receiptShowRatePerUnit && `/${formatUnitCode(line.unitCode)}`}
+            </span>
             <span className="col-amount">{formatMoneyPrecise(line.lineTotal)}</span>
           </div>
         </div>
