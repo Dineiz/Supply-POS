@@ -143,6 +143,137 @@ against the container it sits in, not just the Tailwind class — the brand
 SVGs' `viewBox` is already tightly cropped to content (see ADR-007), so
 sizing is purely the `className` height now, nothing hidden in the asset.
 
+## ADR-009: order detail pages, "Today"-first lists and reports, and warehouse-timezone days
+
+**Status:** Accepted · **Date:** 2026-10-16 · **Deciders:** owner (client feedback), engineering
+
+### Context
+
+Client feedback after go-live: on the Deliveries, Receiving and Returns tabs,
+clicking a row does nothing, so an operator cannot see what was sent or
+received, which items, or whether it was paid. Reports only offer two raw date
+boxes; the client wants *one day, 7 days, or custom* for everything bought and
+sold. And "some tabs open on all dates, some on custom, none on today".
+
+Auditing the code found four separate causes, not one:
+
+1. **No detail view exists.** `GET /goods-receipts/:id` is built but nothing
+   calls it; the `/issues`, `/returns` and `/payments` rows are plain `<tr>`s.
+   The list endpoints return line *counts*, never lines or payment state.
+2. **Every list page starts at `useState<DateRange | null>(null)`**, i.e. "All
+   dates". Worse, `DatePresetFilter` kept `activePreset` in its own state that
+   starts `null`, so even a page that *did* pass today's range would label it a
+   raw date ("17 Oct") instead of "Today" — the "shows custom, not today" symptom.
+3. **Two contradicting day rules.** List endpoints (`parseListQuery`) read
+   `from`/`to` as the *server's local* day (no `Z`). Report endpoints
+   (`parseDateRange`, `daily-summary`) read them as *UTC* days, and the report
+   pages compute "today" with `toISOString()` (UTC). On a UTC host serving a
+   UTC+5 business, anything sold between midnight and 05:00 local lands on the
+   wrong day, and the browser's "today" is *yesterday* for those hours.
+   `Warehouse.timezone` (default `Asia/Karachi`) exists in the schema and is read
+   nowhere.
+4. **Payment state is invisible and, for suppliers, never recorded.**
+   `GoodsReceipt.paidAmount` has no write path anywhere (documented in Purchase
+   History and Daily Summary), so "is it paid?" cannot be answered for receiving.
+   For deliveries it *can* be: non-reversed `PaymentAllocation`s are the canonical
+   "paid" figure (`getOutstandingIssues`), but only the Daily Summary surfaces it.
+
+### Decision
+
+1. **One period control, one default.** `DatePresetFilter` becomes the only date
+   control for lists *and* reports: Today · Yesterday · Last 7 days · This month ·
+   Custom range (· All dates, lists only). Its label is **derived from the value**,
+   never from click history. Every screen opens on **Today**. The chosen range is
+   spelled out next to the control and the empty state offers Last 7 days / All dates.
+2. **Detail pages, not drawers:** `/issues/[id]`, `/receiving/[id]`,
+   `/returns/[id]`, `/payments/[id]`. The whole row is the click target. Each page
+   shows header facts, every line (qty × rate = amount), the money summary, who did
+   it, and links to related documents (delivery ↔ its payments and returns;
+   payment → the deliveries it settled; return → the original delivery).
+3. **Payment state is computed once** (pure rule in
+   `packages/logic/src/payment-status.ts`, loaded per page by
+   `apps/api/src/lib/issue-money.ts`): `paid` = Σ non-reversed allocations;
+   `returned` = Σ return credit linked to the delivery;
+   `due = max(0, total − returned − paid)`; status = Paid / Part paid / Unpaid.
+   Lists, details, Sales History and Daily Summary all use it, so they cannot disagree.
+4. **Calendar days are warehouse-timezone days, resolved on the server.** Clients
+   send `YYYY-MM-DD`; `packages/logic/src/date-range.ts` (pure, unit-tested) turns
+   that into the UTC instants of local 00:00 and 23:59:59.999 in
+   `Warehouse.timezone`, DST-safe via `Intl`. One rule replaces the two. Report
+   day-bucketing uses the same zone.
+5. **Reports:** every period report gets the shared control and defaults to Today.
+   *Daily Summary* accepts a period (`from`/`to`; `date` still works) and adds a
+   by-day table for multi-day ranges. New *Sales History* (every delivery with
+   paid/left, an items-sold table, and a line-level Excel sheet) is the missing
+   mirror of *Purchase History*, which gains an items-bought table and payment
+   columns. Both open each document in its detail page.
+6. **Supplier payment is captured minimally.** `POST /goods-receipts` accepts an
+   optional `paidAmount` + `paymentMethod` ("paid now"), and a new
+   `POST /goods-receipts/:id/payments` settles later. These write the existing
+   `GoodsReceipt.paidAmount` / `paymentMethod` columns — **no migration, no
+   payables ledger** (still `SPEC.md` Part 0 question 5, deferred). Receipts
+   recorded before this change read "No payment recorded", not "Unpaid", because
+   history never captured it.
+
+### Options considered
+
+**Detail UI** — (A) slide-over drawer on the list; (B) **dedicated route**;
+(C) inline expanding rows.
+
+| Dimension | A. Drawer | B. Route (chosen) | C. Inline rows |
+|---|---|---|---|
+| Linkable / refresh-safe / printable | No | **Yes** | No |
+| Reports can deep-link into it | No | **Yes** | No |
+| Matches existing code | New pattern | **`customers/[id]`, `items/[id]`, `stock-counts/[id]`** | New pattern |
+| Room for lines + payments + related docs | Cramped on a phone | **Full page** | Pushes the list around |
+
+**Day boundaries** — (A) server `?preset=today`; (B) **client sends calendar
+days, server resolves them in the warehouse timezone**; (C) client sends UTC
+instants. B keeps URLs and inputs human-readable (`2026-10-16`), keeps custom
+ranges and presets on one code path, and leaves timezone authority with the one
+component that has the schema. A forks presets from custom ranges. C leaks the
+browser's timezone into the data and breaks when a manager opens the app from a
+laptop set to another zone.
+
+**Supplier payment** — (A) leave it "not tracked" and say so; (B) **minimal
+paid-now + settle-later on existing columns**; (C) full payables ledger. A fails
+the client's literal question ("is the payment done?"). C is a feature the spec
+explicitly deferred. B answers the question with zero schema change and is easy
+to remove.
+
+### Trade-offs
+
+- Whole-row click plus a real link in the number cell: slightly more markup, but
+  keyboard, screen-reader and middle-click all work.
+- `due` nets out returns, matching what the customer actually owes on the ledger,
+  but `getOutstandingIssues` (payment auto-allocation) still ignores returns — a
+  pre-existing quirk. A payment can therefore be allocated "past" a returned
+  delivery's net, and a row's "left" can differ from the ledger by that amount.
+  Period totals strips use the ledger-consistent aggregate. **Not changed here**
+  (it alters money allocation); logged in `05-edge-cases.md` to revisit.
+- Supplier "settle later" keeps a running `paidAmount` plus an audit-log entry per
+  payment, not a payments table.
+
+### Consequences
+
+- Easier: answering "what did we send / receive / take back, and is it settled?"
+  in one click; one place to change date behaviour; reports agree with lists.
+- Harder: nothing structural. List endpoints now return a little more (paid/due
+  per row, period totals).
+- Revisit: returns-aware auto-allocation; a real supplier payables ledger;
+  whether report pages should remember the last period (deliberately **not**
+  done — "opens on Today" is the rule).
+
+### Action items
+
+1. [x] Vault note (this ADR)
+2. [x] `packages/logic/src/date-range.ts` + tests
+3. [x] API: tz-aware range parsing, payment-status helper, list summaries, detail endpoints, supplier payment
+4. [x] Web: period control, four list tabs, four detail pages, receiving "paid now"
+5. [x] Reports: shared control, Summary with period, Sales History, Purchase History items
+6. [x] Update `04-flows`, `05-edge-cases`, `07-progress`, `08-api`, `00-index`
+7. [ ] Later: returns-aware payment allocation; supplier payables ledger
+
 ## Open — needs an ADR before it's added
 
 Nothing yet. BullMQ / Socket.IO / Redis remain explicitly out of scope per

@@ -1,10 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { prisma } from "@dineiz-supply/db";
-import { calculateMovingAverage, Decimal } from "@dineiz-supply/logic";
+import { calculateMovingAverage, Decimal, summarizeSupplierPayment } from "@dineiz-supply/logic";
 import { logAudit } from "../lib/audit.js";
 import { parseListQuery, type ListQuerystring } from "../lib/list-query.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 const VARIANCE_THRESHOLD = 0.5; // 50% above current average triggers the warning
+
+type PaymentMethod = "CASH" | "BANK_TRANSFER" | "JAZZCASH" | "EASYPAISA" | "CHEQUE";
+const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "BANK_TRANSFER", "JAZZCASH", "EASYPAISA", "CHEQUE"];
 
 interface ReceiptLineInput {
   itemId: string;
@@ -21,6 +25,21 @@ interface CreateReceiptBody {
   lines: ReceiptLineInput[];
   notes?: string;
   acknowledgeVariance?: boolean;
+  /** Cash handed to the supplier at the time of receiving, if any. */
+  paidAmount?: number;
+  paymentMethod?: PaymentMethod;
+}
+
+interface PayReceiptBody {
+  amount: number;
+  method: PaymentMethod;
+  notes?: string;
+}
+
+/** Wire format for a receipt's payment state, all money as 2dp strings. */
+function supplierPaymentJson(totalAmount: Decimal.Value, paidAmount: Decimal.Value) {
+  const s = summarizeSupplierPayment({ total: totalAmount, paid: paidAmount });
+  return { total: s.total.toFixed(2), paid: s.paid.toFixed(2), due: s.due.toFixed(2), status: s.status };
 }
 
 function monthStamp(): string {
@@ -33,12 +52,14 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
     "/goods-receipts",
     { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
     async (request) => {
-      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query);
+      const warehouseId = request.user.warehouseId;
+      const timeZone = await getWarehouseTimezone(warehouseId);
+      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query, timeZone);
       const where = {
-        warehouseId: request.user.warehouseId,
+        warehouseId,
         ...(dateWhere ? { receivedAt: dateWhere } : {}),
       };
-      const [receipts, total] = await Promise.all([
+      const [receipts, total, totals] = await Promise.all([
         prisma.goodsReceipt.findMany({
           where,
           select: {
@@ -46,17 +67,29 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
             receiptNumber: true,
             receivedAt: true,
             totalAmount: true,
+            paidAmount: true,
             receivedByName: true,
             supplierInvoiceNumber: true,
             supplier: { select: { id: true, name: true } },
-            lines: { select: { id: true, varianceFlagged: true } },
+            lines: {
+              select: {
+                id: true,
+                varianceFlagged: true,
+                qtyInPurchaseUnit: true,
+                item: { select: { name: true, purchaseUnit: { select: { code: true } } } },
+              },
+            },
           },
           orderBy: { receivedAt: "desc" },
           skip,
           take,
         }),
         prisma.goodsReceipt.count({ where }),
+        prisma.goodsReceipt.aggregate({ where, _sum: { totalAmount: true, paidAmount: true } }),
       ]);
+
+      const totalAmount = new Decimal(totals._sum.totalAmount ?? 0);
+      const paidAmount = new Decimal(totals._sum.paidAmount ?? 0);
 
       return {
         rows: receipts.map((r) => ({
@@ -69,29 +102,156 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
           supplier: r.supplier,
           lineCount: r.lines.length,
           hadVariance: r.lines.some((l) => l.varianceFlagged),
+          payment: supplierPaymentJson(r.totalAmount, r.paidAmount),
+          items: r.lines.map((l) => ({
+            name: l.item.name,
+            qty: l.qtyInPurchaseUnit,
+            unitCode: l.item.purchaseUnit.code,
+          })),
         })),
         total,
         page,
         pageSize,
+        summary: {
+          count: total,
+          totalAmount: totalAmount.toFixed(2),
+          paidAmount: paidAmount.toFixed(2),
+          dueAmount: Decimal.max(totalAmount.minus(paidAmount), 0).toFixed(2),
+        },
       };
     }
   );
 
+  // Everything about one receipt: every line, what was paid and when, and who
+  // booked it in. Payment history comes from the audit log, which is where
+  // each payment is recorded (there is no separate supplier-payments table).
   app.get<{ Params: { id: string } }>(
     "/goods-receipts/:id",
     { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
     async (request, reply) => {
+      const warehouseId = request.user.warehouseId;
       const receipt = await prisma.goodsReceipt.findFirst({
-        where: { id: request.params.id, warehouseId: request.user.warehouseId },
+        where: { id: request.params.id, warehouseId },
         include: {
-          supplier: { select: { id: true, name: true } },
+          supplier: { select: { id: true, name: true, phone: true } },
           lines: {
-            include: { item: { select: { id: true, name: true, sellUnit: { select: { code: true } } } } },
+            orderBy: { id: "asc" },
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  name: true,
+                  purchaseUnit: { select: { code: true } },
+                  sellUnit: { select: { code: true } },
+                },
+              },
+            },
           },
         },
       });
       if (!receipt) return reply.code(404).send({ message: "Receipt not found." });
-      return receipt;
+
+      const paymentLog = await prisma.auditLog.findMany({
+        where: { warehouseId, entityType: "GoodsReceipt", entityId: receipt.id, action: "SUPPLIER_PAYMENT_RECORDED" },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, createdAt: true, actorName: true, after: true, reason: true },
+      });
+
+      return {
+        id: receipt.id,
+        receiptNumber: receipt.receiptNumber,
+        receivedAt: receipt.receivedAt,
+        receivedByName: receipt.receivedByName,
+        supplier: receipt.supplier,
+        supplierInvoiceNumber: receipt.supplierInvoiceNumber,
+        supplierInvoiceDate: receipt.supplierInvoiceDate,
+        notes: receipt.notes,
+        totalAmount: receipt.totalAmount,
+        paymentMethod: receipt.paymentMethod,
+        payment: supplierPaymentJson(receipt.totalAmount, receipt.paidAmount),
+        lines: receipt.lines.map((l) => ({
+          id: l.id,
+          itemId: l.item.id,
+          itemName: l.item.name,
+          purchaseUnitCode: l.item.purchaseUnit.code,
+          sellUnitCode: l.item.sellUnit.code,
+          qtyInPurchaseUnit: l.qtyInPurchaseUnit,
+          qtyInSellUnit: l.qtyInSellUnit,
+          unitCostPurchaseUnit: l.unitCostPurchaseUnit,
+          unitCostSellUnit: l.unitCostSellUnit,
+          lineTotal: l.lineTotal,
+          batchNumber: l.batchNumber,
+          expiryDate: l.expiryDate,
+          priceVariancePercent: l.priceVariancePercent,
+          varianceFlagged: l.varianceFlagged,
+        })),
+        payments: paymentLog.map((p) => {
+          const after = (p.after ?? {}) as { amount?: string; method?: string };
+          return {
+            id: p.id,
+            at: p.createdAt,
+            recordedByName: p.actorName,
+            amount: after.amount ?? "0.00",
+            method: after.method ?? null,
+            notes: p.reason,
+          };
+        }),
+      };
+    }
+  );
+
+  // Settle (all or part of) what is still owed on a receipt. Deliberately a
+  // running total on GoodsReceipt.paidAmount plus an audit entry, not a
+  // payables ledger -- see ADR-009 and SPEC.md Part 0 question 5.
+  app.post<{ Params: { id: string }; Body: PayReceiptBody }>(
+    "/goods-receipts/:id/payments",
+    { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
+    async (request, reply) => {
+      const warehouseId = request.user.warehouseId;
+      const { amount, method, notes } = request.body ?? ({} as PayReceiptBody);
+
+      if (!(amount > 0)) return reply.code(400).send({ message: "Enter an amount greater than zero." });
+      if (!PAYMENT_METHODS.includes(method)) return reply.code(400).send({ message: "Choose how it was paid." });
+
+      const receipt = await prisma.goodsReceipt.findFirst({ where: { id: request.params.id, warehouseId } });
+      if (!receipt) return reply.code(404).send({ message: "Receipt not found." });
+
+      const pay = new Decimal(amount);
+      const owed = Decimal.max(new Decimal(receipt.totalAmount).minus(receipt.paidAmount), 0);
+      if (pay.gt(owed)) {
+        return reply.code(409).send({
+          message: `Only PKR ${owed.toFixed(2)} is still owed on ${receipt.receiptNumber}. You entered PKR ${pay.toFixed(2)}.`,
+        });
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const row = await tx.goodsReceipt.update({
+          where: { id: receipt.id },
+          data: { paidAmount: { increment: pay.toFixed(2) }, paymentMethod: method },
+        });
+        // Two people paying at once must not push it past the total.
+        if (new Decimal(row.paidAmount).gt(row.totalAmount)) throw new Error("OVERPAID");
+        return row;
+      }).catch((err: unknown) => {
+        if (err instanceof Error && err.message === "OVERPAID") return null;
+        throw err;
+      });
+      if (!updated) {
+        return reply.code(409).send({ message: "That payment was already recorded by someone else. Refresh and check." });
+      }
+
+      await logAudit({
+        warehouseId,
+        actor: request.user,
+        action: "SUPPLIER_PAYMENT_RECORDED",
+        entityType: "GoodsReceipt",
+        entityId: receipt.id,
+        before: { paidAmount: new Decimal(receipt.paidAmount).toFixed(2) },
+        after: { amount: pay.toFixed(2), method, paidAmount: new Decimal(updated.paidAmount).toFixed(2) },
+        reason: notes,
+      });
+
+      return reply.code(201).send({ payment: supplierPaymentJson(updated.totalAmount, updated.paidAmount) });
     }
   );
 
@@ -158,14 +318,28 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
         });
       }
 
+      const totalAmount = resolvedLines.reduce(
+        (sum, l) => sum.plus(l.qtyInPurchaseUnit.times(l.unitCostPurchaseUnit)),
+        new Decimal(0)
+      );
+
+      const paidNow = new Decimal(body.paidAmount ?? 0);
+      if (paidNow.lt(0)) {
+        return reply.code(400).send({ message: "The amount paid can't be negative." });
+      }
+      if (paidNow.gt(totalAmount)) {
+        return reply.code(400).send({
+          message: `You entered PKR ${paidNow.toFixed(2)} paid, but this receipt is only PKR ${totalAmount.toFixed(2)}.`,
+        });
+      }
+      if (paidNow.gt(0) && body.paymentMethod && !PAYMENT_METHODS.includes(body.paymentMethod)) {
+        return reply.code(400).send({ message: "Choose how it was paid." });
+      }
+      const paymentMethod: PaymentMethod | undefined = paidNow.gt(0) ? body.paymentMethod ?? "CASH" : undefined;
+
       const receipt = await prisma.$transaction(async (tx) => {
         const receiptCountThisMonth = await tx.goodsReceipt.count({ where: { warehouseId } });
         const receiptNumber = `GRN-${monthStamp()}-${String(receiptCountThisMonth + 1).padStart(4, "0")}`;
-
-        const totalAmount = resolvedLines.reduce(
-          (sum, l) => sum.plus(l.qtyInPurchaseUnit.times(l.unitCostPurchaseUnit)),
-          new Decimal(0)
-        );
 
         const receiptRow = await tx.goodsReceipt.create({
           data: {
@@ -175,6 +349,8 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
             supplierInvoiceNumber: body.supplierInvoiceNumber,
             supplierInvoiceDate: body.supplierInvoiceDate ? new Date(body.supplierInvoiceDate) : undefined,
             totalAmount: totalAmount.toFixed(2),
+            paidAmount: paidNow.toFixed(2),
+            paymentMethod,
             receivedById: request.user.sub,
             receivedByName: request.user.name,
             notes: body.notes,
@@ -263,6 +439,21 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
         entityId: receipt.id,
         after: { receiptNumber: receipt.receiptNumber, totalAmount: receipt.totalAmount.toString() },
       });
+
+      // Same record as a later settlement, so the receipt's payment history is
+      // one list whether the money went out at the door or afterwards.
+      if (paidNow.gt(0)) {
+        await logAudit({
+          warehouseId,
+          actor: request.user,
+          action: "SUPPLIER_PAYMENT_RECORDED",
+          entityType: "GoodsReceipt",
+          entityId: receipt.id,
+          before: { paidAmount: "0.00" },
+          after: { amount: paidNow.toFixed(2), method: paymentMethod, paidAmount: paidNow.toFixed(2) },
+          reason: "Paid when received",
+        });
+      }
 
       return reply.code(201).send(receipt);
     }

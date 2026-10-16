@@ -2,7 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { Prisma, prisma } from "@dineiz-supply/db";
 import { calculateIssueTotals, allocatePayment, Decimal } from "@dineiz-supply/logic";
 import { getOutstandingIssues } from "../lib/ledger.js";
+import { aggregateIssueMoney, loadIssueMoney, paymentSummaryJson } from "../lib/issue-money.js";
 import { parseListQuery, type ListQuerystring } from "../lib/list-query.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 interface IssueLineInput {
   itemId: string;
@@ -22,19 +24,30 @@ interface CreateIssueBody {
 }
 
 export default async function issueRoutes(app: FastifyInstance) {
-  app.get<{ Querystring: { customerId?: string } & ListQuerystring }>(
+  app.get<{ Querystring: { customerId?: string; q?: string } & ListQuerystring }>(
     "/issues",
     { preHandler: [app.authenticate] },
     async (request) => {
       const warehouseId = request.user.warehouseId;
-      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query);
+      const timeZone = await getWarehouseTimezone(warehouseId);
+      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query, timeZone);
+      const search = request.query.q?.trim();
       const where = {
         warehouseId,
         status: "ISSUED" as const,
         ...(request.query.customerId ? { customerId: request.query.customerId } : {}),
         ...(dateWhere ? { issuedAt: dateWhere } : {}),
+        // Searched in the database so it covers every page, not just the 25 on screen.
+        ...(search
+          ? {
+              OR: [
+                { issueNumber: { contains: search, mode: "insensitive" as const } },
+                { customer: { name: { contains: search, mode: "insensitive" as const } } },
+              ],
+            }
+          : {}),
       };
-      const [rows, total] = await Promise.all([
+      const [issues, total, summary] = await Promise.all([
         prisma.issue.findMany({
           where,
           select: {
@@ -43,17 +56,116 @@ export default async function issueRoutes(app: FastifyInstance) {
             issuedAt: true,
             totalAmount: true,
             customer: { select: { id: true, name: true } },
-            lines: { select: { id: true, itemName: true, qty: true, returnedQty: true } },
+            lines: {
+              select: { id: true, itemName: true, unitCode: true, qty: true, returnedQty: true },
+              orderBy: { sortOrder: "asc" },
+            },
           },
           orderBy: { issuedAt: "desc" },
           skip,
           take,
         }),
         prisma.issue.count({ where }),
+        aggregateIssueMoney(where),
       ]);
-      return { rows, total, page, pageSize };
+      const money = await loadIssueMoney(issues.map((i) => i.id));
+      const rows = issues.map((issue) => ({ ...issue, payment: paymentSummaryJson(issue.totalAmount, money.get(issue.id)) }));
+      return { rows, total, page, pageSize, summary };
     }
   );
+
+  // Everything an operator needs to answer "what did we send, to whom, and has
+  // it been paid?" for one delivery. No cost or margin: that stays in reports.
+  app.get<{ Params: { id: string } }>("/issues/:id/detail", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const issue = await prisma.issue.findFirst({
+      where: { id: request.params.id, warehouseId: request.user.warehouseId },
+      include: {
+        customer: { select: { id: true, name: true, nameUrdu: true, code: true, phone: true } },
+        lines: { orderBy: { sortOrder: "asc" } },
+        paymentAllocations: {
+          orderBy: { createdAt: "asc" },
+          include: {
+            payment: {
+              select: {
+                id: true,
+                paymentNumber: true,
+                paymentDate: true,
+                method: true,
+                reference: true,
+                amount: true,
+                isReversed: true,
+                reverseReason: true,
+                receivedByName: true,
+              },
+            },
+          },
+        },
+        returnNotes: {
+          orderBy: { createdAt: "asc" },
+          include: { lines: { select: { id: true, itemName: true, unitCode: true, qty: true, creditAmount: true, condition: true } } },
+        },
+      },
+    });
+    if (!issue) return reply.code(404).send({ message: "Delivery not found." });
+
+    const paid = issue.paymentAllocations
+      .filter((a) => !a.payment.isReversed)
+      .reduce((sum, a) => sum.plus(a.amountApplied), new Decimal(0));
+    const returned = issue.returnNotes.reduce((sum, r) => sum.plus(r.totalCreditAmount), new Decimal(0));
+
+    return {
+      id: issue.id,
+      issueNumber: issue.issueNumber,
+      status: issue.status,
+      issuedAt: issue.issuedAt,
+      issuedByName: issue.issuedByName,
+      receivedByName: issue.receivedByName,
+      notes: issue.notes,
+      printCount: issue.printCount,
+      cancelledAt: issue.cancelledAt,
+      cancelReason: issue.cancelReason,
+      customer: issue.customer,
+      subtotal: issue.subtotal,
+      discountAmount: issue.discountAmount,
+      totalAmount: issue.totalAmount,
+      balanceBefore: issue.balanceBefore,
+      balanceAfter: issue.balanceAfter,
+      payment: paymentSummaryJson(issue.totalAmount, { paid, returned }),
+      lines: issue.lines.map((l) => ({
+        id: l.id,
+        itemId: l.itemId,
+        itemName: l.itemName,
+        itemNameUrdu: l.itemNameUrdu,
+        unitCode: l.unitCode,
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal,
+        returnedQty: l.returnedQty,
+        notes: l.notes,
+      })),
+      payments: issue.paymentAllocations.map((a) => ({
+        id: a.id,
+        amountApplied: a.amountApplied,
+        paymentId: a.payment.id,
+        paymentNumber: a.payment.paymentNumber,
+        paymentDate: a.payment.paymentDate,
+        method: a.payment.method,
+        reference: a.payment.reference,
+        paymentAmount: a.payment.amount,
+        receivedByName: a.payment.receivedByName,
+        isReversed: a.payment.isReversed,
+        reverseReason: a.payment.reverseReason,
+      })),
+      returns: issue.returnNotes.map((r) => ({
+        id: r.id,
+        returnNumber: r.returnNumber,
+        createdAt: r.createdAt,
+        totalCreditAmount: r.totalCreditAmount,
+        reason: r.reason,
+        lines: r.lines,
+      })),
+    };
+  });
 
   app.get<{ Params: { id: string } }>("/issues/:id", { preHandler: [app.authenticate] }, async (request, reply) => {
     const issue = await prisma.issue.findFirst({

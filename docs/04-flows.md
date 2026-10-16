@@ -111,6 +111,19 @@ One transaction:
    if the line was variance-flagged, `reason` records the acknowledged
    variance percentage.
 7. `AuditLog` row.
+8. **Payment to the supplier (ADR-009).** The form has an optional "Paid now"
+   amount and method. Anything entered is written to `GoodsReceipt.paidAmount` /
+   `paymentMethod` and logged as a `SUPPLIER_PAYMENT_RECORDED` audit entry
+   ("Paid when received"). The rest can be settled later from the receipt page
+   (`POST /goods-receipts/:id/payments`), which adds to `paidAmount` and writes
+   another audit entry — that list of entries is the receipt's payment history.
+   There is no payables ledger and `Supplier.currentPayable` is still not
+   maintained.
+
+After saving, the form lands on the receipt's own page (`/receiving/[id]`) so
+what was just recorded is on screen. Every list tab (Deliveries, Receiving,
+Returns, Payments) opens on **Today** and every row opens a detail page — see
+[ADR-009](./06-decisions.md#adr-009-order-detail-pages-today-first-lists-and-reports-and-warehouse-timezone-days).
 
 Not implemented: linking a receipt to a `PurchaseOrder` (the field exists on
 both `GoodsReceipt` and `PurchaseLot`, but nothing writes to

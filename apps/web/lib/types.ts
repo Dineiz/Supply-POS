@@ -80,6 +80,25 @@ export interface Supplier {
   isActive?: boolean;
 }
 
+/** Has a customer paid for a delivery? One definition shared with the API (packages/logic). */
+export type DeliveryPaymentStatus = "PAID" | "PART_PAID" | "UNPAID" | "RETURNED";
+export interface DeliveryPayment {
+  total: string;
+  returned: string;
+  paid: string;
+  due: string;
+  status: DeliveryPaymentStatus;
+}
+
+/** Have we paid a supplier for a receipt? NOT_RECORDED is deliberately not "unpaid". */
+export type SupplierPaymentStatus = "PAID" | "PART_PAID" | "NOT_RECORDED";
+export interface SupplierPayment {
+  total: string;
+  paid: string;
+  due: string;
+  status: SupplierPaymentStatus;
+}
+
 export interface GoodsReceiptListItem {
   id: string;
   receiptNumber: string;
@@ -90,6 +109,48 @@ export interface GoodsReceiptListItem {
   supplier: { id: string; name: string };
   lineCount: number;
   hadVariance: boolean;
+  payment: SupplierPayment;
+  items: { name: string; qty: string; unitCode: string }[];
+}
+
+export interface GoodsReceiptListSummary {
+  count: number;
+  totalAmount: string;
+  paidAmount: string;
+  dueAmount: string;
+}
+
+export interface GoodsReceiptDetailLine {
+  id: string;
+  itemId: string;
+  itemName: string;
+  purchaseUnitCode: string;
+  sellUnitCode: string;
+  qtyInPurchaseUnit: string;
+  qtyInSellUnit: string;
+  unitCostPurchaseUnit: string;
+  unitCostSellUnit: string;
+  lineTotal: string;
+  batchNumber: string | null;
+  expiryDate: string | null;
+  priceVariancePercent: string | null;
+  varianceFlagged: boolean;
+}
+
+export interface GoodsReceiptDetail {
+  id: string;
+  receiptNumber: string;
+  receivedAt: string;
+  receivedByName: string;
+  supplier: { id: string; name: string; phone: string | null };
+  supplierInvoiceNumber: string | null;
+  supplierInvoiceDate: string | null;
+  notes: string | null;
+  totalAmount: string;
+  paymentMethod: PaymentMethod | null;
+  payment: SupplierPayment;
+  lines: GoodsReceiptDetailLine[];
+  payments: { id: string; at: string; recordedByName: string; amount: string; method: string | null; notes: string | null }[];
 }
 
 export interface FlaggedLine {
@@ -118,7 +179,69 @@ export interface IssueSummary {
   issuedAt: string;
   totalAmount: string;
   customer: { id: string; name: string };
-  lines: { id: string; itemName: string; qty: string; returnedQty: string }[];
+  lines: { id: string; itemName: string; unitCode: string; qty: string; returnedQty: string }[];
+  payment: DeliveryPayment;
+}
+
+export interface IssueListSummary {
+  count: number;
+  totalAmount: string;
+  returnedAmount: string;
+  paidAmount: string;
+  dueAmount: string;
+}
+
+export interface DeliveryDetail {
+  id: string;
+  issueNumber: string;
+  status: string;
+  issuedAt: string;
+  issuedByName: string;
+  receivedByName: string | null;
+  notes: string | null;
+  printCount: number;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  customer: { id: string; name: string; nameUrdu: string | null; code: string | null; phone: string | null };
+  subtotal: string;
+  discountAmount: string;
+  totalAmount: string;
+  balanceBefore: string;
+  balanceAfter: string;
+  payment: DeliveryPayment;
+  lines: {
+    id: string;
+    itemId: string;
+    itemName: string;
+    itemNameUrdu: string | null;
+    unitCode: string;
+    qty: string;
+    unitPrice: string;
+    lineTotal: string;
+    returnedQty: string;
+    notes: string | null;
+  }[];
+  payments: {
+    id: string;
+    amountApplied: string;
+    paymentId: string;
+    paymentNumber: string;
+    paymentDate: string;
+    method: PaymentMethod;
+    reference: string | null;
+    paymentAmount: string;
+    receivedByName: string;
+    isReversed: boolean;
+    reverseReason: string | null;
+  }[];
+  returns: {
+    id: string;
+    returnNumber: string;
+    createdAt: string;
+    totalCreditAmount: string;
+    reason: string | null;
+    lines: { id: string; itemName: string; unitCode: string; qty: string; creditAmount: string; condition: ReturnCondition }[];
+  }[];
 }
 
 export interface IssueDetailLine {
@@ -148,7 +271,43 @@ export interface ReturnListItem {
   totalCostWrittenOff: string;
   returnedByName: string | null;
   customer: { id: string; name: string };
-  lines: { id: string }[];
+  originalIssue: { id: string; issueNumber: string } | null;
+  lines: { id: string; itemName: string; unitCode: string; qty: string; condition: ReturnCondition }[];
+}
+
+export interface ReturnListSummary {
+  count: number;
+  creditAmount: string;
+  costWrittenOff: string;
+}
+
+export interface ReturnDetail {
+  id: string;
+  returnNumber: string;
+  status: string;
+  createdAt: string;
+  acceptedByName: string | null;
+  returnedByName: string | null;
+  reason: string | null;
+  notes: string | null;
+  customer: { id: string; name: string; nameUrdu: string | null; code: string | null; phone: string | null };
+  originalIssue: { id: string; issueNumber: string; issuedAt: string; totalAmount: string } | null;
+  totalCreditAmount: string;
+  totalCostReversed: string;
+  totalCostWrittenOff: string;
+  balanceBefore: string;
+  balanceAfter: string;
+  lines: {
+    id: string;
+    itemId: string;
+    itemName: string;
+    unitCode: string;
+    qty: string;
+    creditUnitPrice: string;
+    creditAmount: string;
+    condition: ReturnCondition;
+    restoredToStock: boolean;
+  }[];
 }
 
 export interface PaymentListItem {
@@ -161,6 +320,41 @@ export interface PaymentListItem {
   isReversed: boolean;
   reverseReason: string | null;
   customer: { id: string; name: string };
+  appliedTo: { issueId: string; issueNumber: string }[];
+  onAccount: string;
+}
+
+export interface PaymentListSummary {
+  count: number;
+  collectedAmount: string;
+  collectedCount: number;
+  reversedCount: number;
+}
+
+export interface PaymentDetail {
+  id: string;
+  paymentNumber: string;
+  paymentDate: string;
+  createdAt: string;
+  amount: string;
+  method: PaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  receivedByName: string;
+  paidByName: string | null;
+  balanceBefore: string;
+  balanceAfter: string;
+  isReversed: boolean;
+  reversedAt: string | null;
+  reverseReason: string | null;
+  customer: { id: string; name: string; nameUrdu: string | null; code: string | null; phone: string | null };
+  appliedAmount: string;
+  onAccountAmount: string;
+  allocations: {
+    id: string;
+    amountApplied: string;
+    issue: { id: string; issueNumber: string; issuedAt: string; totalAmount: string };
+  }[];
 }
 
 export interface PrintLine {
@@ -497,12 +691,18 @@ export interface ExpiryRow {
 }
 
 export interface DailySummary {
+  /** First day of the period (kept for the original single-day shape). */
   date: string;
+  fromDay: string;
+  toDay: string;
+  dayCount: number;
   sales: { orderCount: number; grossSales: string; returnCount: number; returnsTotal: string; netSales: string };
   collections: { byMethod: { method: string; amount: string }[]; total: string };
-  purchases: { receiptCount: number; total: string };
+  purchases: { receiptCount: number; total: string; paid: string; due: string };
   wastage: { lines: { itemName: string; qty: string; unitCode: string; reason: string; costImpact: string }[]; total: string };
-  orders: { issueNumber: string; customerName: string; totalAmount: string; status: "Paid" | "Partial" | "Unpaid" }[];
+  /** Deliveries are listed for a single day only; longer periods use byDay and Sales History. */
+  orders: { id: string; issueNumber: string; issuedAt: string; customerName: string; totalAmount: string; payment: DeliveryPayment }[];
+  byDay: { date: string; orders: number; sales: string; returns: string; collected: string; purchases: string }[] | null;
 }
 
 export interface PurchaseRegisterRow {
@@ -513,6 +713,9 @@ export interface PurchaseRegisterRow {
   invoiceNumber: string | null;
   lineCount: number;
   totalAmount: string;
+  paidAmount: string;
+  dueAmount: string;
+  paymentStatus: SupplierPaymentStatus;
 }
 
 export interface PurchaseRegister {
@@ -520,8 +723,53 @@ export interface PurchaseRegister {
   to: string;
   rows: PurchaseRegisterRow[];
   grandTotal: string;
+  paidTotal: string;
+  dueTotal: string;
   bySupplier: { supplierId: string; name: string; total: string }[];
+  items: { itemId: string; name: string; unitCode: string; qty: string; total: string; averageCost: string; receiptCount: number }[];
+  lines: {
+    receiptId: string;
+    receiptNumber: string;
+    receivedAt: string;
+    supplierName: string;
+    itemName: string;
+    unitCode: string;
+    qty: string;
+    unitCost: string;
+    lineTotal: string;
+    batchNumber: string | null;
+  }[];
   priceChanges: { itemName: string; from: string; to: string; changePercent: string; date: string }[];
+}
+
+export interface SalesHistory {
+  fromDay: string;
+  toDay: string;
+  /** True when more deliveries matched than were listed; totals are still complete. */
+  truncated: boolean;
+  rows: {
+    id: string;
+    issueNumber: string;
+    issuedAt: string;
+    customerId: string;
+    customerName: string;
+    lineCount: number;
+    totalAmount: string;
+    payment: DeliveryPayment;
+  }[];
+  totals: IssueListSummary;
+  items: { itemId: string; name: string; unitCode: string; qty: string; returnedQty: string; revenue: string }[];
+  lines: {
+    issueNumber: string;
+    issuedAt: string;
+    customerName: string;
+    itemName: string;
+    unitCode: string;
+    qty: string;
+    unitPrice: string;
+    lineTotal: string;
+    returnedQty: string;
+  }[];
 }
 
 export interface WastageReportByReason {
