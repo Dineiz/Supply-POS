@@ -19,6 +19,7 @@ const SECTIONS: { title: string; reports: { href: string; name: string; descript
     title: "Purchases",
     reports: [
       { href: "/reports/purchase-register", name: "Purchase History", description: "Every receipt and every item you bought, and what is paid to suppliers" },
+      { href: "/reports/supplier-statement", name: "Supplier Account", description: "Pick a supplier: see what you bought, what you paid, and what you still owe them" },
     ],
   },
   {

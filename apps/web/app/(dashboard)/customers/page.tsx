@@ -83,19 +83,20 @@ export default function CustomersPage() {
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3 text-right">Owes</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-ink-muted">
+                <td colSpan={5} className="px-4 py-10 text-center text-ink-muted">
                   Loading…
                 </td>
               </tr>
             )}
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-ink-muted">
+                <td colSpan={5} className="px-4 py-10 text-center text-ink-muted">
                   No customers match.
                 </td>
               </tr>
@@ -120,6 +121,14 @@ export default function CustomersPage() {
                     >
                       {c.isActive === false ? "Inactive" : "Active"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/reports/customer-statement?customerId=${c.id}`}
+                      className="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10 hover:text-accent-hover"
+                    >
+                      Statement →
+                    </Link>
                   </td>
                 </tr>
               );

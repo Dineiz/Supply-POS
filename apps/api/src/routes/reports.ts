@@ -413,13 +413,23 @@ export default async function reportRoutes(app: FastifyInstance) {
 
     const issueWhere = { warehouseId, status: "ISSUED" as const, issuedAt: range };
 
-    const [issues, issueTotals, returns, payments, receipts, wastages] = await Promise.all([
+    const [issues, issueTotals, returns, payments, receipts, wastages, receiptLines] = await Promise.all([
       // The delivery list is for one day only; a longer period gets the day-by-day
       // table below and the full listing lives in Sales History.
       isSingleDay
         ? prisma.issue.findMany({
             where: issueWhere,
-            select: { id: true, issueNumber: true, issuedAt: true, totalAmount: true, customer: { select: { name: true } } },
+            select: {
+              id: true,
+              issueNumber: true,
+              issuedAt: true,
+              totalAmount: true,
+              customer: { select: { name: true } },
+              lines: {
+                select: { id: true, itemName: true, qty: true, unitCode: true, unitPrice: true, lineTotal: true },
+                orderBy: { id: "asc" },
+              },
+            },
             orderBy: { issuedAt: "asc" },
           })
         : Promise.resolve([]),
@@ -443,6 +453,31 @@ export default async function reportRoutes(app: FastifyInstance) {
         where: { warehouseId, createdAt: range },
         select: { qty: true, reason: true, costImpact: true, item: { select: { name: true, sellUnit: { select: { code: true } } } } },
       }),
+      // Purchase receipt detail lines for single-day view
+      isSingleDay
+        ? prisma.goodsReceipt.findMany({
+            where: { warehouseId, receivedAt: range },
+            select: {
+              id: true,
+              receiptNumber: true,
+              receivedAt: true,
+              totalAmount: true,
+              paidAmount: true,
+              supplier: { select: { name: true } },
+              lines: {
+                select: {
+                  id: true,
+                  qtyInPurchaseUnit: true,
+                  unitCostPurchaseUnit: true,
+                  lineTotal: true,
+                  item: { select: { name: true, purchaseUnit: { select: { code: true } } } },
+                },
+                orderBy: { id: "asc" },
+              },
+            },
+            orderBy: { receivedAt: "asc" },
+          })
+        : Promise.resolve([]),
     ]);
 
     const grossSales = new Decimal(issueTotals._sum.totalAmount ?? 0);
@@ -462,6 +497,31 @@ export default async function reportRoutes(app: FastifyInstance) {
       customerName: i.customer.name,
       totalAmount: new Decimal(i.totalAmount).toFixed(2),
       payment: paymentSummaryJson(i.totalAmount, money.get(i.id)),
+      lines: (i as any).lines?.map((l: any) => ({
+        itemName: l.itemName,
+        qty: new Decimal(l.qty).toFixed(4),
+        unitCode: l.unitCode,
+        unitPrice: new Decimal(l.unitPrice).toFixed(2),
+        lineTotal: new Decimal(l.lineTotal).toFixed(2),
+      })) ?? [],
+    }));
+
+    // Purchase receipt detail rows (single day only)
+    const receiptRows = receiptLines.map((r: any) => ({
+      id: r.id,
+      receiptNumber: r.receiptNumber,
+      receivedAt: r.receivedAt.toISOString(),
+      supplierName: r.supplier.name,
+      totalAmount: new Decimal(r.totalAmount).toFixed(2),
+      paidAmount: new Decimal(r.paidAmount ?? 0).toFixed(2),
+      dueAmount: Decimal.max(new Decimal(r.totalAmount).minus(r.paidAmount ?? 0), 0).toFixed(2),
+      lines: r.lines.map((l: any) => ({
+        itemName: l.item.name,
+        qty: new Decimal(l.qtyInPurchaseUnit).toFixed(4),
+        unitCode: l.item.purchaseUnit.code,
+        unitCost: new Decimal(l.unitCostPurchaseUnit).toFixed(2),
+        lineTotal: new Decimal(l.lineTotal).toFixed(2),
+      })),
     }));
 
     // Day-by-day, bucketed on the warehouse clock so a 01:00 sale lands on the
@@ -535,6 +595,7 @@ export default async function reportRoutes(app: FastifyInstance) {
         total: wastageTotal.toFixed(2),
       },
       orders: orderRows,
+      receiptRows: isSingleDay ? receiptRows : [],
       byDay,
     };
   });

@@ -701,7 +701,26 @@ export interface DailySummary {
   purchases: { receiptCount: number; total: string; paid: string; due: string };
   wastage: { lines: { itemName: string; qty: string; unitCode: string; reason: string; costImpact: string }[]; total: string };
   /** Deliveries are listed for a single day only; longer periods use byDay and Sales History. */
-  orders: { id: string; issueNumber: string; issuedAt: string; customerName: string; totalAmount: string; payment: DeliveryPayment }[];
+  orders: {
+    id: string;
+    issueNumber: string;
+    issuedAt: string;
+    customerName: string;
+    totalAmount: string;
+    payment: DeliveryPayment;
+    lines: { itemName: string; qty: string; unitCode: string; unitPrice: string; lineTotal: string }[];
+  }[];
+  /** Purchase receipts with full line items — single day only, empty array for multi-day periods. */
+  receiptRows: {
+    id: string;
+    receiptNumber: string;
+    receivedAt: string;
+    supplierName: string;
+    totalAmount: string;
+    paidAmount: string;
+    dueAmount: string;
+    lines: { itemName: string; qty: string; unitCode: string; unitCost: string; lineTotal: string }[];
+  }[];
   byDay: { date: string; orders: number; sales: string; returns: string; collected: string; purchases: string }[] | null;
 }
 
@@ -815,6 +834,37 @@ export interface CustomerStatement {
   closingBalance: string;
   entries: CustomerLedgerEntry[];
   aging: AgingBuckets;
+}
+
+/** One receipt row in a supplier's account ledger. */
+export interface SupplierLedgerEntry {
+  id: string;
+  receiptNumber: string;
+  receivedAt: string;
+  invoiceNumber: string | null;
+  totalAmount: string;
+  paidAmount: string;
+  dueAmount: string;
+  lines: { itemName: string; qty: string; unitCode: string; unitCost: string; lineTotal: string }[];
+}
+
+/** One standalone payment made to a supplier (settle-later). */
+export interface SupplierPaymentEntry {
+  id: string;
+  recordedAt: string;
+  amount: string;
+  method: string | null;
+  notes: string | null;
+}
+
+/** Full account statement for a supplier: what was bought, what was paid, what is owed. */
+export interface SupplierStatement {
+  openingTotal: string;
+  closingTotal: string;
+  totalBought: string;
+  totalPaid: string;
+  totalDue: string;
+  receipts: SupplierLedgerEntry[];
 }
 
 export interface CartLine {

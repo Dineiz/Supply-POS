@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ReportPeriod } from "@/components/reports/date-range";
 import { presetRange } from "@/lib/period";
 import { ReportToolbar } from "@/components/reports/report-toolbar";
@@ -28,8 +29,9 @@ const BUCKET_LABELS: [keyof CustomerStatement["aging"], string][] = [
 ];
 
 export default function CustomerStatementPage() {
+  const searchParams = useSearchParams();
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [customerId, setCustomerId] = useState("");
+  const [customerId, setCustomerId] = useState(searchParams.get("customerId") ?? "");
   const [range, setRange] = useState(presetRange("month"));
   const [statement, setStatement] = useState<CustomerStatement | null>(null);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
