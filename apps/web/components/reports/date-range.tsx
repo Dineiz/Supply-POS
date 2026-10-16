@@ -1,38 +1,12 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { DatePresetFilter } from "@/components/filters/date-preset-filter";
+import type { DateRange } from "@/lib/period";
 
-export function DateRangeFilter({
-  from,
-  to,
-  onFromChange,
-  onToChange,
-}: {
-  from: string;
-  to: string;
-  onFromChange: (value: string) => void;
-  onToChange: (value: string) => void;
-}) {
-  return (
-    <div className="mb-6 flex flex-wrap items-end gap-3">
-      <div>
-        <label className="mb-1 block text-xs font-medium text-ink-muted">From</label>
-        <Input type="date" value={from} onChange={(e) => onFromChange(e.target.value)} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-ink-muted">To</label>
-        <Input type="date" value={to} onChange={(e) => onToChange(e.target.value)} />
-      </div>
-    </div>
-  );
-}
-
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-export function defaultRange(): { from: string; to: string } {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  return { from: isoDate(start), to: isoDate(now) };
+/**
+ * The period picker every report uses: the same control as the list tabs,
+ * minus "All dates" because a report always covers a definite period.
+ */
+export function ReportPeriod({ value, onChange }: { value: DateRange; onChange: (range: DateRange) => void }) {
+  return <DatePresetFilter value={value} onChange={(range) => range && onChange(range)} allowAll={false} />;
 }

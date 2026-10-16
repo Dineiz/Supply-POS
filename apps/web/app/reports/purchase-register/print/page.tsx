@@ -3,8 +3,10 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Letterhead, useLetterhead } from "@/components/reports/letterhead";
+import { supplierStatusLabel } from "@/components/ui/status-chip";
 import { authFetch, ApiError } from "@/lib/api";
-import { formatMoneyPrecise, formatDate } from "@/lib/format";
+import { formatMoneyPrecise, formatDate, formatQty } from "@/lib/format";
+import { formatRange } from "@/lib/period";
 import type { PurchaseRegister } from "@/lib/types";
 
 function PrintPurchaseRegister() {
@@ -37,26 +39,30 @@ function PrintPurchaseRegister() {
         Print
       </button>
       <div className="a4-report">
-        <Letterhead warehouse={warehouse} title="PURCHASE HISTORY" period={`${from} — ${to}`} />
+        <Letterhead warehouse={warehouse} title="PURCHASE HISTORY" period={from && to ? formatRange({ from, to }) : undefined} />
 
         <table>
           <thead>
             <tr>
               <th>Date</th>
+              <th>Receipt</th>
               <th>Supplier</th>
               <th>Bill#</th>
-              <th className="num">Items</th>
               <th className="num">Amount</th>
+              <th className="num">Paid</th>
+              <th>Payment</th>
             </tr>
           </thead>
           <tbody>
             {report.rows.map((r) => (
               <tr key={r.id}>
                 <td>{formatDate(r.receivedAt)}</td>
+                <td>{r.receiptNumber}</td>
                 <td>{r.supplierName}</td>
                 <td>{r.invoiceNumber ?? "—"}</td>
-                <td className="num">{r.lineCount}</td>
                 <td className="num">{formatMoneyPrecise(r.totalAmount)}</td>
+                <td className="num">{formatMoneyPrecise(r.paidAmount)}</td>
+                <td>{supplierStatusLabel(r.paymentStatus)}</td>
               </tr>
             ))}
           </tbody>
@@ -64,9 +70,37 @@ function PrintPurchaseRegister() {
             <tr style={{ fontWeight: 700 }}>
               <td colSpan={4}>TOTAL</td>
               <td className="num">{formatMoneyPrecise(report.grandTotal)}</td>
+              <td className="num">{formatMoneyPrecise(report.paidTotal)}</td>
+              <td />
             </tr>
           </tfoot>
         </table>
+
+        {report.items.length > 0 && (
+          <div style={{ marginTop: "5mm" }}>
+            <p style={{ fontWeight: 700, marginBottom: "1mm" }}>ITEMS BOUGHT</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th className="num">Quantity</th>
+                  <th className="num">Average cost</th>
+                  <th className="num">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.items.map((i) => (
+                  <tr key={i.itemId}>
+                    <td>{i.name}</td>
+                    <td className="num">{formatQty(i.qty, i.unitCode)}</td>
+                    <td className="num">{formatMoneyPrecise(i.averageCost)}</td>
+                    <td className="num">{formatMoneyPrecise(i.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div style={{ marginTop: "5mm" }}>
           <p style={{ fontWeight: 700, marginBottom: "1mm" }}>BY SUPPLIER</p>
@@ -93,6 +127,8 @@ function PrintPurchaseRegister() {
             ))}
           </div>
         )}
+
+        <p className="footnote">Payments to suppliers are only counted when recorded in this system.</p>
       </div>
     </div>
   );

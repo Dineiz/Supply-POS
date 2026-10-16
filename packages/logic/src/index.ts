@@ -4,4 +4,6 @@ export * from "./pricing.js";
 export * from "./payments.js";
 export * from "./reorder.js";
 export * from "./aging.js";
+export * from "./date-range.js";
+export * from "./payment-status.js";
 export { Decimal } from "decimal.js";

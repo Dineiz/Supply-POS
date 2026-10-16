@@ -2,150 +2,121 @@
 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
+import {
+  PERIOD_LABEL,
+  describeRange,
+  detectPeriod,
+  presetRange,
+  type DateRange,
+  type PeriodKey,
+} from "@/lib/period";
 
-export interface DateRange {
-  from: string;
-  to: string;
-}
+export type { DateRange } from "@/lib/period";
 
-type PresetKey = "today" | "yesterday" | "week" | "month";
+const PRESETS: PeriodKey[] = ["today", "yesterday", "last7", "month"];
 
-function isoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function presetRange(key: PresetKey): DateRange {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  if (key === "today") return { from: isoDate(today), to: isoDate(today) };
-
-  if (key === "yesterday") {
-    const y = new Date(today);
-    y.setDate(y.getDate() - 1);
-    return { from: isoDate(y), to: isoDate(y) };
-  }
-
-  if (key === "week") {
-    const start = new Date(today);
-    const daysSinceMonday = (start.getDay() + 6) % 7;
-    start.setDate(start.getDate() - daysSinceMonday);
-    return { from: isoDate(start), to: isoDate(today) };
-  }
-
-  const start = new Date(today.getFullYear(), today.getMonth(), 1);
-  return { from: isoDate(start), to: isoDate(today) };
-}
-
-function formatShort(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
-}
-
-const PRESETS: { key: PresetKey; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "week", label: "This week" },
-  { key: "month", label: "This month" },
-];
-
+/**
+ * The single date control for every list and report. The presets are always
+ * visible (not tucked in a menu) and the selected one is derived from the
+ * value, so what is highlighted is always what is actually being shown.
+ * Lists allow "All dates"; reports always need a real period.
+ */
 export function DatePresetFilter({
   value,
   onChange,
+  allowAll = true,
 }: {
   value: DateRange | null;
   onChange: (range: DateRange | null) => void;
+  allowAll?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [activePreset, setActivePreset] = useState<PresetKey | "custom" | null>(null);
+  const kind = detectPeriod(value);
+  const [customOpen, setCustomOpen] = useState(false);
+  const showCustom = customOpen || kind === "custom";
 
-  function pick(key: PresetKey) {
-    setActivePreset(key);
+  function pick(key: PeriodKey) {
+    setCustomOpen(false);
     onChange(presetRange(key));
-    setOpen(false);
   }
 
-  function setCustom(next: DateRange) {
-    setActivePreset("custom");
-    onChange(next);
+  function openCustom() {
+    setCustomOpen(true);
+    // From "All dates" there is nothing to edit yet; start from today.
+    if (!value) onChange(presetRange("today"));
   }
 
-  function clear() {
-    setActivePreset(null);
+  function pickAll() {
+    setCustomOpen(false);
     onChange(null);
-    setOpen(false);
   }
 
-  const label = !value
-    ? "All dates"
-    : activePreset && activePreset !== "custom"
-      ? (PRESETS.find((p) => p.key === activePreset)?.label ?? "All dates")
-      : value.from === value.to
-        ? formatShort(value.from)
-        : `${formatShort(value.from)} – ${formatShort(value.to)}`;
+  function setFrom(from: string) {
+    if (!from) return;
+    const to = value?.to && value.to >= from ? value.to : from;
+    onChange({ from, to });
+  }
+
+  function setTo(to: string) {
+    if (!to) return;
+    const from = value?.from && value.from <= to ? value.from : to;
+    onChange({ from, to });
+  }
+
+  const buttonBase =
+    "h-10 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  const selected = "border-ink bg-ink text-white";
+  const idle = "border-border bg-paper text-ink-muted hover:bg-surface hover:text-ink";
 
   return (
-    <div className="relative mb-4 inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-          value ? "border-ink bg-ink text-white" : "border-border text-ink-muted hover:bg-surface hover:text-ink"
-        }`}
-      >
-        {label}
-        <span className={value ? "text-white/70" : "text-ink-faint"}>▾</span>
-      </button>
+    <div className="mb-4">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Date range">
+        {PRESETS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={!showCustom && kind === key}
+            onClick={() => pick(key)}
+            className={`${buttonBase} ${!showCustom && kind === key ? selected : idle}`}
+          >
+            {PERIOD_LABEL[key]}
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-pressed={showCustom}
+          onClick={openCustom}
+          className={`${buttonBase} ${showCustom ? selected : idle}`}
+        >
+          Custom range
+        </button>
+        {allowAll && (
+          <button
+            type="button"
+            aria-pressed={!showCustom && kind === "all"}
+            onClick={pickAll}
+            className={`${buttonBase} ${!showCustom && kind === "all" ? selected : idle}`}
+          >
+            All dates
+          </button>
+        )}
+      </div>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-11 z-50 w-72 overflow-hidden rounded-lg border border-border bg-paper shadow-lg">
-            <div className="p-1">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  onClick={() => pick(p.key)}
-                  className={`block w-full rounded-md px-3 py-2 text-left text-sm font-medium transition-colors ${
-                    activePreset === p.key ? "bg-ink text-white" : "text-ink-muted hover:bg-surface hover:text-ink"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            <div className="border-t border-border p-3">
-              <p className="mb-2 text-xs font-medium text-ink-muted">Custom range</p>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={value?.from ?? ""}
-                  onChange={(e) => setCustom({ from: e.target.value, to: value?.to ?? e.target.value })}
-                />
-                <span className="text-ink-faint">–</span>
-                <Input
-                  type="date"
-                  value={value?.to ?? ""}
-                  onChange={(e) => setCustom({ from: value?.from ?? e.target.value, to: e.target.value })}
-                />
-              </div>
-            </div>
-            {value && (
-              <button
-                type="button"
-                onClick={clear}
-                className="block w-full border-t border-border px-3 py-2 text-left text-sm text-ink-muted hover:bg-surface hover:text-ink"
-              >
-                Clear filter
-              </button>
-            )}
+      {showCustom && value && (
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-muted">From</label>
+            <Input type="date" value={value.from} max={value.to} onChange={(e) => setFrom(e.target.value)} className="w-44" />
           </div>
-        </>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-muted">To</label>
+            <Input type="date" value={value.to} min={value.from} onChange={(e) => setTo(e.target.value)} className="w-44" />
+          </div>
+        </div>
       )}
+
+      <p className="mt-2 text-xs font-medium text-ink-muted" aria-live="polite">
+        {describeRange(value)}
+      </p>
     </div>
   );
 }

@@ -72,6 +72,16 @@ below). All verified in the browser, not just written:
   (aging missing non-`Issue` balances, reorder excluding real sales on a
   zero-stock day) remain fixed and carried forward unchanged.
 
+- **Order details and period-first screens (Phase 12):** every list tab
+  (Deliveries, Receiving, Returns, Payments, plus Wastage and Stock Counts)
+  opens on **Today**, with Yesterday / Last 7 days / This month / Custom / All
+  dates always visible, and every row opens a detail page showing every item
+  and whether it is paid. Days are warehouse-timezone calendar days. Reports
+  take a day, a week or any period; new Sales History, richer Purchase History,
+  and supplier payments recorded at receiving or settled later. See
+  [ADR-009](./06-decisions.md#adr-009-order-detail-pages-today-first-lists-and-reports-and-warehouse-timezone-days)
+  and [07-progress.md](./07-progress.md#phase-12--order-details-today-everywhere-and-period-reports--done).
+
 - Hardening (Phase 9): a reconciliation report that checks every customer
   balance and item stock quantity against a from-scratch sum of its own
   ledger/movement history — verified by deliberately corrupting both kinds

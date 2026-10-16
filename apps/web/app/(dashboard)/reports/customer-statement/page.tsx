@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DateRangeFilter, defaultRange } from "@/components/reports/date-range";
+import { ReportPeriod } from "@/components/reports/date-range";
+import { presetRange } from "@/lib/period";
 import { ReportToolbar } from "@/components/reports/report-toolbar";
 import { useLetterhead } from "@/components/reports/letterhead";
 import { authFetch, ApiError } from "@/lib/api";
@@ -29,7 +30,7 @@ const BUCKET_LABELS: [keyof CustomerStatement["aging"], string][] = [
 export default function CustomerStatementPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState("");
-  const [range, setRange] = useState(defaultRange());
+  const [range, setRange] = useState(presetRange("month"));
   const [statement, setStatement] = useState<CustomerStatement | null>(null);
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [loadingLedger, setLoadingLedger] = useState(false);
@@ -152,7 +153,7 @@ export default function CustomerStatementPage() {
             ))}
           </select>
         </div>
-        <DateRangeFilter from={range.from} to={range.to} onFromChange={(from) => setRange((r) => ({ ...r, from }))} onToChange={(to) => setRange((r) => ({ ...r, to }))} />
+        <ReportPeriod value={range} onChange={setRange} />
       </div>
 
       {error && <p className="mb-4 rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>}

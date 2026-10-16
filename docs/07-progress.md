@@ -557,6 +557,37 @@ adding a new dependency/service wasn't asked for and isn't required to go
 live; automated backups are a host-side setting, not something this repo
 can configure from inside the container.
 
+## Phase 12 — Order details, "Today" everywhere, and period reports — **done**
+
+Triggered by client feedback: on Deliveries, Receiving and Returns, clicking a
+row showed nothing (no items, no payment state); reports only had two raw date
+boxes; and tabs opened on all dates, some on "custom", none on today. Audited
+first — four separate causes, written up in
+[ADR-009](./06-decisions.md#adr-009-order-detail-pages-today-first-lists-and-reports-and-warehouse-timezone-days).
+
+| Task | Status |
+|---|---|
+| One period control (Today / Yesterday / Last 7 days / This month / Custom / All dates) | **Done** — [`date-preset-filter.tsx`](../apps/web/components/filters/date-preset-filter.tsx), label derived from the value so it can't say "Custom" for today. Used by Deliveries, Receiving, Returns, Payments, Wastage, Stock Counts and every period report. Every one opens on Today (Customer Statement opens on This month — a statement for one day is rarely what you want) |
+| Warehouse-timezone days | **Done and verified** — new pure `date-range.ts` in `packages/logic` (18 tests incl. DST); lists, reports, Daily Summary, wastage trend and the customer ledger all resolve `from`/`to` on the warehouse clock. Replaces the two contradicting rules (server-local for lists, UTC for reports) |
+| Detail pages | **Done and verified in the browser** — `/issues/[id]`, `/receiving/[id]`, `/returns/[id]`, `/payments/[id]`; whole row clickable, every line, payment state, related documents linked both ways |
+| Payment state | **Done** — one definition in `packages/logic/src/payment-status.ts` (11 tests) used by every list, detail and report. Deliveries: Paid / Part paid / Unpaid / Returned. Receipts: Paid / Part paid / No payment recorded |
+| Supplier payments | **Done and verified** — optional "Paid now" on the new-receipt form, *Record payment* on the receipt page. Writes the existing `GoodsReceipt.paidAmount`/`paymentMethod` columns; **no migration**. Still no payables ledger |
+| Lists show money first | **Done** — period totals strip on each tab (whole filtered set, not the page), items preview per row, payment chip next to the total, server-side delivery search |
+| Reports | **Done and verified** — *Summary* (was Daily Summary) takes a day, a week or any period and adds a day-by-day table; new *Sales History*; *Purchase History* gains payment columns, an items-bought table and a line-by-line Excel sheet. Reports link into each other with their dates |
+
+Verified against a throwaway Postgres (migrations + seed, port 5442, since
+removed) with data created through the real endpoints: 53 API checks (day
+boundaries incl. the 01:30 case, payment states, details, over-payment guards,
+report totals reconciling with list totals), then the same screens in the
+browser, then `next build` (49 routes) and `pnpm typecheck`.
+
+**Not verified:** the PDF and Excel downloads and the A4 print views for the new/changed
+reports (typechecked and built, not clicked through).
+
+**Open, deliberately not done:** returns-aware payment allocation
+([05-edge-cases.md](./05-edge-cases.md#payments)); a real supplier payables
+ledger; remembering the last-used period (opening on Today is the rule).
+
 ## Blocked on
 
 Nothing technical. Before Phase 3+ goes much further, the five open

@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VarianceModal } from "@/components/receiving/variance-modal";
 import { authFetch, ApiError } from "@/lib/api";
-import { formatMoney } from "@/lib/format";
-import type { FlaggedLine, Item, Supplier } from "@/lib/types";
+import { PAYMENT_METHOD_LABEL, formatMoney } from "@/lib/format";
+import type { FlaggedLine, Item, PaymentMethod, Supplier } from "@/lib/types";
 
 interface ReceiptLineForm {
   itemId: string;
@@ -32,6 +32,8 @@ function NewReceiptForm() {
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [lines, setLines] = useState<ReceiptLineForm[]>([emptyLine()]);
+  const [paidNow, setPaidNow] = useState("");
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flaggedLines, setFlaggedLines] = useState<FlaggedLine[] | null>(null);
@@ -96,6 +98,8 @@ function NewReceiptForm() {
         expiryDate: l.expiryDate || undefined,
       })),
       acknowledgeVariance,
+      paidAmount: Number(paidNow) > 0 ? Number(paidNow) : undefined,
+      paymentMethod: Number(paidNow) > 0 ? payMethod : undefined,
     };
   }
 
@@ -103,8 +107,12 @@ function NewReceiptForm() {
     setSubmitting(true);
     setError(null);
     try {
-      await authFetch("/goods-receipts", { method: "POST", body: JSON.stringify(buildPayload(acknowledgeVariance)) });
-      router.push("/receiving");
+      const created = await authFetch<{ id: string }>("/goods-receipts", {
+        method: "POST",
+        body: JSON.stringify(buildPayload(acknowledgeVariance)),
+      });
+      // Land on the saved receipt so what was just recorded is on screen.
+      router.push(`/receiving/${created.id}`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         const body = err.body as { flaggedLines: FlaggedLine[] };
@@ -125,6 +133,10 @@ function NewReceiptForm() {
     }
     if (validLines.length === 0) {
       setError("Add at least one line with an item, quantity, and cost.");
+      return;
+    }
+    if (Number(paidNow) > grandTotal) {
+      setError(`You entered ${formatMoney(Number(paidNow))} paid, but this receipt is only ${formatMoney(grandTotal)}.`);
       return;
     }
     submit(false);
@@ -268,6 +280,42 @@ function NewReceiptForm() {
           <Button type="button" variant="secondary" onClick={addLine}>
             + Add line
           </Button>
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-ink">Payment to supplier</h2>
+          <p className="text-xs text-ink-muted">
+            If you paid the supplier when the goods arrived, enter it here. Leave it empty if you haven&apos;t paid yet —
+            you can record the payment later from the receipt.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">
+                Paid now (PKR) <span className="text-ink-faint">(optional)</span>
+              </label>
+              <Input type="number" step="0.01" min="0" value={paidNow} onChange={(e) => setPaidNow(e.target.value)} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-ink-muted">How it was paid</label>
+              <select
+                value={payMethod}
+                onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}
+                disabled={!(Number(paidNow) > 0)}
+                className="h-11 w-full rounded-md border border-border-strong bg-paper px-3 text-sm text-ink disabled:opacity-40"
+              >
+                {Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {Number(paidNow) > 0 && grandTotal > 0 && Number(paidNow) <= grandTotal && (
+            <p className="font-tabular text-xs text-ink-muted">
+              Still owed after this: {formatMoney(grandTotal - Number(paidNow))}
+            </p>
+          )}
         </div>
 
         <div className="flex items-center justify-between border-t border-border pt-6">

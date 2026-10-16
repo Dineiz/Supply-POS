@@ -4,6 +4,7 @@ import { allocatePayment, Decimal } from "@dineiz-supply/logic";
 import { logAudit } from "../lib/audit.js";
 import { getOutstandingIssues } from "../lib/ledger.js";
 import { parseListQuery, type ListQuerystring } from "../lib/list-query.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "JAZZCASH" | "EASYPAISA" | "CHEQUE";
 
@@ -37,12 +38,14 @@ export default async function paymentRoutes(app: FastifyInstance) {
     "/payments",
     { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
     async (request) => {
-      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query);
+      const warehouseId = request.user.warehouseId;
+      const timeZone = await getWarehouseTimezone(warehouseId);
+      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query, timeZone);
       const where = {
-        warehouseId: request.user.warehouseId,
+        warehouseId,
         ...(dateWhere ? { paymentDate: dateWhere } : {}),
       };
-      const [rows, total] = await Promise.all([
+      const [payments, total, collected, reversed] = await Promise.all([
         prisma.payment.findMany({
           where,
           select: {
@@ -55,14 +58,85 @@ export default async function paymentRoutes(app: FastifyInstance) {
             isReversed: true,
             reverseReason: true,
             customer: { select: { id: true, name: true } },
+            allocations: { select: { amountApplied: true, issue: { select: { id: true, issueNumber: true } } } },
           },
           orderBy: { paymentDate: "desc" },
           skip,
           take,
         }),
         prisma.payment.count({ where }),
+        prisma.payment.aggregate({ where: { ...where, isReversed: false }, _sum: { amount: true }, _count: true }),
+        prisma.payment.count({ where: { ...where, isReversed: true } }),
       ]);
-      return { rows, total, page, pageSize };
+
+      const rows = payments.map(({ allocations, ...p }) => {
+        const applied = allocations.reduce((sum, a) => sum.plus(a.amountApplied), new Decimal(0));
+        return {
+          ...p,
+          appliedTo: allocations.map((a) => ({ issueId: a.issue.id, issueNumber: a.issue.issueNumber })),
+          // Anything not tied to a delivery sits on the customer's account as credit.
+          onAccount: Decimal.max(new Decimal(p.amount).minus(applied), 0).toFixed(2),
+        };
+      });
+
+      return {
+        rows,
+        total,
+        page,
+        pageSize,
+        summary: {
+          count: total,
+          collectedAmount: new Decimal(collected._sum.amount ?? 0).toFixed(2),
+          collectedCount: collected._count,
+          reversedCount: reversed,
+        },
+      };
+    }
+  );
+
+  app.get<{ Params: { id: string } }>(
+    "/payments/:id",
+    { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
+    async (request, reply) => {
+      const payment = await prisma.payment.findFirst({
+        where: { id: request.params.id, warehouseId: request.user.warehouseId },
+        include: {
+          customer: { select: { id: true, name: true, nameUrdu: true, code: true, phone: true } },
+          allocations: {
+            orderBy: { createdAt: "asc" },
+            include: { issue: { select: { id: true, issueNumber: true, issuedAt: true, totalAmount: true } } },
+          },
+        },
+      });
+      if (!payment) return reply.code(404).send({ message: "Payment not found." });
+
+      const applied = payment.allocations.reduce((sum, a) => sum.plus(a.amountApplied), new Decimal(0));
+
+      return {
+        id: payment.id,
+        paymentNumber: payment.paymentNumber,
+        paymentDate: payment.paymentDate,
+        createdAt: payment.createdAt,
+        amount: payment.amount,
+        method: payment.method,
+        reference: payment.reference,
+        notes: payment.notes,
+        receivedByName: payment.receivedByName,
+        paidByName: payment.paidByName,
+        balanceBefore: payment.balanceBefore,
+        balanceAfter: payment.balanceAfter,
+        isReversed: payment.isReversed,
+        reversedAt: payment.reversedAt,
+        reverseReason: payment.reverseReason,
+        customer: payment.customer,
+        appliedAmount: applied.toFixed(2),
+        onAccountAmount: Decimal.max(new Decimal(payment.amount).minus(applied), 0).toFixed(2),
+        allocations: payment.allocations.map((a) => ({
+          id: a.id,
+          amountApplied: a.amountApplied,
+          issue: a.issue,
+        })),
+      };
     }
   );
 

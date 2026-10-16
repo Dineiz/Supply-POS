@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { Prisma, prisma } from "@dineiz-supply/db";
-import { Decimal, ageLedgerDebits } from "@dineiz-supply/logic";
+import { Decimal, ageLedgerDebits, resolveOpenRange } from "@dineiz-supply/logic";
 import { logAudit } from "../lib/audit.js";
 import { getOutstandingIssues } from "../lib/ledger.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 const CUSTOMER_SELECT = {
   id: true,
@@ -103,8 +104,11 @@ export default async function customerRoutes(app: FastifyInstance) {
       const customer = await prisma.customer.findFirst({ where: { id: request.params.id, warehouseId } });
       if (!customer) return reply.code(404).send({ message: "Customer not found." });
 
-      const from = request.query.from ? new Date(`${request.query.from}T00:00:00.000Z`) : null;
-      const to = request.query.to ? new Date(`${request.query.to}T23:59:59.999Z`) : new Date();
+      // Calendar days on the warehouse clock, same rule as every list and report (ADR-009).
+      const timeZone = await getWarehouseTimezone(warehouseId);
+      const range = resolveOpenRange(request.query.from, request.query.to, timeZone);
+      const from = range?.gte ?? null;
+      const to = range?.lte ?? new Date();
 
       const [before, inRange] = await Promise.all([
         from

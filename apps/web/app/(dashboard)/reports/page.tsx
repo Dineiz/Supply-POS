@@ -2,9 +2,23 @@ import Link from "next/link";
 
 const SECTIONS: { title: string; reports: { href: string; name: string; description: string }[] }[] = [
   {
-    title: "Daily",
+    title: "Summary",
     reports: [
-      { href: "/reports/daily-summary", name: "Daily Summary", description: "Today's close" },
+      { href: "/reports/daily-summary", name: "Summary", description: "Sales, payments, purchases and losses — for a day, a week or any dates" },
+    ],
+  },
+  {
+    title: "Sales",
+    reports: [
+      { href: "/reports/sales-history", name: "Sales History", description: "Every delivery and every item you sold, and what is paid" },
+      { href: "/reports/sales-by-customer", name: "Sales by Customer", description: "Who buys most" },
+      { href: "/reports/item-profitability", name: "Profit by Item", description: "Where the profit comes from" },
+    ],
+  },
+  {
+    title: "Purchases",
+    reports: [
+      { href: "/reports/purchase-register", name: "Purchase History", description: "Every receipt and every item you bought, and what is paid to suppliers" },
     ],
   },
   {
@@ -13,7 +27,6 @@ const SECTIONS: { title: string; reports: { href: string; name: string; descript
       { href: "/reports/customer-statement", name: "Customer Statement", description: "Who owes what" },
       { href: "/reports/receivables-aging", name: "Overdue Payments", description: "Overdue amounts" },
       { href: "/reports/profit-loss", name: "Profit & Loss", description: "Revenue, cost, and margin" },
-      { href: "/reports/item-profitability", name: "Profit by Item", description: "Where the profit comes from" },
     ],
   },
   {
@@ -22,18 +35,6 @@ const SECTIONS: { title: string; reports: { href: string; name: string; descript
       { href: "/reports/stock-report", name: "Stock Report", description: "What you have" },
       { href: "/reports/reorder-list", name: "Reorder List", description: "What to buy" },
       { href: "/reports/wastage-report", name: "Wastage Report", description: "What you lost" },
-    ],
-  },
-  {
-    title: "Purchases",
-    reports: [
-      { href: "/reports/purchase-register", name: "Purchase History", description: "What you bought" },
-    ],
-  },
-  {
-    title: "Customers",
-    reports: [
-      { href: "/reports/sales-by-customer", name: "Sales by Customer", description: "Who buys most" },
     ],
   },
   {
@@ -50,7 +51,9 @@ export default function ReportsHubPage() {
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-ink">Reports</h1>
-        <p className="text-sm text-ink-muted">Pick a report. Each one opens with a date range and a Print / PDF / Excel option.</p>
+        <p className="text-sm text-ink-muted">
+          Pick a report. Each one opens on today — switch to yesterday, the last 7 days, this month, or choose your own dates — then print it or save it as PDF or Excel.
+        </p>
       </div>
 
       <div className="space-y-8">

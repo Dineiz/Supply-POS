@@ -18,6 +18,11 @@ export function formatMoneyPrecise(value: number | string): string {
   return moneyFormatterPrecise.format(Number(value));
 }
 
+/** Two decimals with the currency, for detail pages where paisa matter, e.g. "PKR 3,180.50". */
+export function formatMoneyExact(value: number | string): string {
+  return `PKR ${moneyFormatterPrecise.format(Number(value))}`;
+}
+
 /** Clean display for unit codes, e.g. L -> Ltr, KG -> kg, PCS -> pcs */
 export function formatUnitCode(unitCode?: string | null): string {
   if (!unitCode) return "";
@@ -47,6 +52,28 @@ export function formatQty(value: number | string, unitCode: string): string {
 export function formatQtyOnly(value: number | string): string {
   const num = Number(value);
   return Number.isInteger(num) ? String(num) : num.toFixed(2);
+}
+
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  BANK_TRANSFER: "Bank transfer",
+  JAZZCASH: "JazzCash",
+  EASYPAISA: "Easypaisa",
+  CHEQUE: "Cheque",
+};
+
+export const RETURN_CONDITION_LABEL: Record<string, string> = {
+  GOOD: "Good",
+  DAMAGED: "Damaged",
+  EXPIRED: "Expired",
+  WRONG_ITEM: "Wrong item",
+};
+
+/** "Rice 5 kg, Oil 2 Ltr +3 more" — enough to recognise an order in a list without opening it. */
+export function summarizeItems(items: { name: string; qty: string | number; unitCode: string }[], max = 2): string {
+  const shown = items.slice(0, max).map((i) => `${i.name} ${formatQty(i.qty, i.unitCode)}`);
+  const rest = items.length - shown.length;
+  return rest > 0 ? `${shown.join(", ")} +${rest} more` : shown.join(", ");
 }
 
 export function formatDate(value: string | Date): string {

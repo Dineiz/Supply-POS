@@ -3,6 +3,7 @@ import { prisma } from "@dineiz-supply/db";
 import { Decimal } from "@dineiz-supply/logic";
 import { logAudit } from "../lib/audit.js";
 import { parseListQuery, type ListQuerystring } from "../lib/list-query.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 type WastageReason =
   | "SPOILED"
@@ -34,7 +35,8 @@ export default async function wastageRoutes(app: FastifyInstance) {
     "/wastage",
     { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
     async (request) => {
-      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query);
+      const timeZone = await getWarehouseTimezone(request.user.warehouseId);
+      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query, timeZone);
       const where = {
         warehouseId: request.user.warehouseId,
         ...(dateWhere ? { createdAt: dateWhere } : {}),

@@ -3,6 +3,7 @@ import { prisma } from "@dineiz-supply/db";
 import { calculateMovingAverage, Decimal } from "@dineiz-supply/logic";
 import { logAudit } from "../lib/audit.js";
 import { parseListQuery, type ListQuerystring } from "../lib/list-query.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 type Condition = "GOOD" | "DAMAGED" | "EXPIRED" | "WRONG_ITEM";
 
@@ -33,12 +34,14 @@ export default async function returnRoutes(app: FastifyInstance) {
     "/returns",
     { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
     async (request) => {
-      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query);
+      const warehouseId = request.user.warehouseId;
+      const timeZone = await getWarehouseTimezone(warehouseId);
+      const { skip, take, page, pageSize, dateWhere } = parseListQuery(request.query, timeZone);
       const where = {
-        warehouseId: request.user.warehouseId,
+        warehouseId,
         ...(dateWhere ? { createdAt: dateWhere } : {}),
       };
-      const [rows, total] = await Promise.all([
+      const [rows, total, totals] = await Promise.all([
         prisma.returnNote.findMany({
           where,
           select: {
@@ -49,15 +52,74 @@ export default async function returnRoutes(app: FastifyInstance) {
             totalCostWrittenOff: true,
             returnedByName: true,
             customer: { select: { id: true, name: true } },
-            lines: { select: { id: true } },
+            originalIssue: { select: { id: true, issueNumber: true } },
+            lines: { select: { id: true, itemName: true, unitCode: true, qty: true, condition: true } },
           },
           orderBy: { createdAt: "desc" },
           skip,
           take,
         }),
         prisma.returnNote.count({ where }),
+        prisma.returnNote.aggregate({ where, _sum: { totalCreditAmount: true, totalCostWrittenOff: true } }),
       ]);
-      return { rows, total, page, pageSize };
+      return {
+        rows,
+        total,
+        page,
+        pageSize,
+        summary: {
+          count: total,
+          creditAmount: new Decimal(totals._sum.totalCreditAmount ?? 0).toFixed(2),
+          costWrittenOff: new Decimal(totals._sum.totalCostWrittenOff ?? 0).toFixed(2),
+        },
+      };
+    }
+  );
+
+  // A return is not a refund: the credit comes off what the customer owes.
+  // The detail therefore shows the account before/after rather than a payment.
+  app.get<{ Params: { id: string } }>(
+    "/returns/:id",
+    { preHandler: [app.authenticate, app.requireRole("OWNER", "MANAGER")] },
+    async (request, reply) => {
+      const note = await prisma.returnNote.findFirst({
+        where: { id: request.params.id, warehouseId: request.user.warehouseId },
+        include: {
+          customer: { select: { id: true, name: true, nameUrdu: true, code: true, phone: true } },
+          originalIssue: { select: { id: true, issueNumber: true, issuedAt: true, totalAmount: true } },
+          lines: { orderBy: { createdAt: "asc" } },
+        },
+      });
+      if (!note) return reply.code(404).send({ message: "Return not found." });
+
+      return {
+        id: note.id,
+        returnNumber: note.returnNumber,
+        status: note.status,
+        createdAt: note.createdAt,
+        acceptedByName: note.acceptedByName,
+        returnedByName: note.returnedByName,
+        reason: note.reason,
+        notes: note.notes,
+        customer: note.customer,
+        originalIssue: note.originalIssue,
+        totalCreditAmount: note.totalCreditAmount,
+        totalCostReversed: note.totalCostReversed,
+        totalCostWrittenOff: note.totalCostWrittenOff,
+        balanceBefore: note.balanceBefore,
+        balanceAfter: note.balanceAfter,
+        lines: note.lines.map((l) => ({
+          id: l.id,
+          itemId: l.itemId,
+          itemName: l.itemName,
+          unitCode: l.unitCode,
+          qty: l.qty,
+          creditUnitPrice: l.creditUnitPrice,
+          creditAmount: l.creditAmount,
+          condition: l.condition,
+          restoredToStock: l.restoredToStock,
+        })),
+      };
     }
   );
 

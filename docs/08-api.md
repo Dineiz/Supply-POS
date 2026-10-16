@@ -106,13 +106,42 @@ the existing one on idempotent replay.
 Errors: `400` missing customerId/lines or missing idempotency header, `404`
 unknown customer/item, `409` stock/credit block (see above).
 
-## `GET /issues`, `GET /issues/:id`
+### Dates (every list and report)
+
+`from` / `to` are plain `YYYY-MM-DD` **calendar days on the warehouse's own
+clock** (`Warehouse.timezone`, default `Asia/Karachi`), resolved to exact
+instants server-side by
+[`packages/logic/src/date-range.ts`](../packages/logic/src/date-range.ts) — see
+[ADR-009](./06-decisions.md#adr-009-order-detail-pages-today-first-lists-and-reports-and-warehouse-timezone-days).
+A delivery made at 01:00 in Karachi belongs to that Karachi day even though it
+is the previous day in UTC. Lists treat a missing or malformed bound as open
+(no limit on that side); reports treat a missing range as **today** and swap a
+reversed range. List responses are `{ rows, total, page, pageSize, summary }`,
+where `summary` totals the **whole filtered set**, not just the page.
+
+## `GET /issues`, `GET /issues/:id`, `GET /issues/:id/detail`
 
 Requires auth. List accepts `?customerId=` to scope to one customer (used by
-the return modal's "which delivery is this for?" picker) and always filters
-to `status: ISSUED`, newest first, capped at 50. Each row includes `lines`
-(`id, itemName, qty, returnedQty`) so the UI can tell which lines still have
-returnable quantity without a second request. Detail includes full `lines`
+the return modal's "which delivery is this for?" picker), `?q=` (delivery
+number or customer name, case-insensitive, searched in the database so it
+covers every page), and `?from=&to=`. It always filters to `status: ISSUED`,
+newest first, paged (`page`, `pageSize` up to 200). Each row includes `lines`
+(`id, itemName, unitCode, qty, returnedQty`) so the UI can preview the items
+and tell which lines still have returnable quantity without a second request,
+and `payment: { total, returned, paid, due, status }` where `status` is
+`PAID | PART_PAID | UNPAID | RETURNED`. `summary` is
+`{ count, totalAmount, returnedAmount, paidAmount, dueAmount }`. **Paid** is
+the sum of non-reversed `PaymentAllocation`s; **returned** is the credit on
+`ReturnNote`s linked to the delivery; `due = max(0, total − returned − paid)`
+([`packages/logic/src/payment-status.ts`](../packages/logic/src/payment-status.ts)).
+
+`GET /issues/:id/detail` is the full picture for the Deliveries detail page:
+header facts, every line (`qty`, `unitPrice`, `lineTotal`, `returnedQty`),
+`payment`, the `payments` applied (including reversed ones, flagged), the
+`returns` against it with their lines, and the customer's balance before/after.
+No cost or margin. `404` for an unknown id.
+
+`GET /issues/:id` (older, used by the return modal) is unchanged. Detail includes full `lines`
 with each line's `item` (`isPerishable`, `returnWindowHours`) so a return
 form can compute the perishable-window hint client-side (the server enforces
 it independently — the client hint is a courtesy, not the source of truth).
@@ -238,10 +267,19 @@ about a supplier is ever actually removed. Presented at `/setup/suppliers`.
 
 Requires auth **and** `OWNER`/`MANAGER`. List returns
 `{ id, receiptNumber, receivedAt, totalAmount, receivedByName,
-supplierInvoiceNumber, supplier, lineCount, hadVariance }` — `hadVariance`
-is true if any line was variance-flagged, used to show the "Price variance"
-badge in the history list without a separate request. Detail returns the
-full record with `lines` (each including its `item`).
+supplierInvoiceNumber, supplier, lineCount, hadVariance, payment, items }` —
+`hadVariance` is true if any line was variance-flagged, used to show the
+"Price jumped" badge in the history list without a separate request.
+`payment` is `{ total, paid, due, status }` with `status`
+`PAID | PART_PAID | NOT_RECORDED` (**not** "unpaid": payments to suppliers were
+not captured before ADR-009, so nothing recorded is not the same as unpaid),
+and `items` is `{ name, qty, unitCode }[]` in the purchase unit for the list
+preview. `summary` is `{ count, totalAmount, paidAmount, dueAmount }`.
+
+`GET /goods-receipts/:id` returns the full record for the detail page: every
+line (purchase-unit and sell-unit quantity and cost, batch, expiry, variance),
+the supplier, `payment`, and `payments` — the history of money paid to the
+supplier, read from the `SUPPLIER_PAYMENT_RECORDED` audit entries.
 
 ## `POST /goods-receipts`
 
@@ -253,10 +291,15 @@ Requires auth and `OWNER`/`MANAGER`. Body:
   supplierInvoiceDate?: string,
   lines: [{ itemId, qtyInPurchaseUnit, unitCostPurchaseUnit, expiryDate?, batchNumber? }],
   notes?: string,
-  acknowledgeVariance?: boolean
+  acknowledgeVariance?: boolean,
+  paidAmount?: number,        // handed to the supplier when the goods arrived
+  paymentMethod?: "CASH" | "BANK_TRANSFER" | "JAZZCASH" | "EASYPAISA" | "CHEQUE"
 }
 ```
-Quantity and cost are entered **in the item's purchase unit** (matching a
+`paidAmount` must be between 0 and the receipt total (`400` otherwise); it is
+written to `GoodsReceipt.paidAmount` / `paymentMethod` (method defaults to
+`CASH`) and recorded as a `SUPPLIER_PAYMENT_RECORDED` audit entry
+("Paid when received"). Quantity and cost are entered **in the item's purchase unit** (matching a
 real supplier invoice — "1 bag, Rs 7,600" — not the sell unit). The endpoint
 converts to sell-unit terms via `item.purchaseToSellFactor` before costing.
 
@@ -274,14 +317,39 @@ updates `Item.currentStockQty`/`avgCostPerUnit`, writes one
 `PURCHASE_RECEIVED` `StockMovement` per line, and an `AuditLog` row. Returns
 the created `GoodsReceipt` with `lines`.
 
-Errors: `400` missing `supplierId`/lines, `404` unknown supplier/item, `409`
-variance block (see above), `403` non-owner/manager role.
+Errors: `400` missing `supplierId`/lines or an invalid `paidAmount`, `404`
+unknown supplier/item, `409` variance block (see above), `403` non-owner/manager
+role.
+
+## `POST /goods-receipts/:id/payments`
+
+Requires auth and `OWNER`/`MANAGER`. Body `{ amount, method, notes? }`. Settles
+all or part of what is still owed on a receipt: increments
+`GoodsReceipt.paidAmount` and sets `paymentMethod`, and writes a
+`SUPPLIER_PAYMENT_RECORDED` audit entry (the receipt's payment history).
+Deliberately a running total plus audit trail, **not** a payables ledger
+(`SPEC.md` Part 0 question 5 stays deferred). Returns `201 { payment }`.
+Errors: `400` non-positive amount or unknown method, `404` unknown receipt,
+`409` more than is owed (or someone else just paid it).
 
 ## `GET /returns`
 
-Requires auth **and** `OWNER`/`MANAGER`. History list:
+Requires auth **and** `OWNER`/`MANAGER`. History list, `?from=&to=` paged:
 `{ id, returnNumber, createdAt, totalCreditAmount, totalCostWrittenOff,
-returnedByName, customer, lines }`.
+returnedByName, customer, originalIssue, lines }` where `lines` are
+`{ id, itemName, unitCode, qty, condition }` for the list preview and
+`originalIssue` is `{ id, issueNumber }` or `null`. `summary` is
+`{ count, creditAmount, costWrittenOff }`.
+
+## `GET /returns/:id`
+
+Requires auth **and** `OWNER`/`MANAGER`. The detail page: every line
+(`qty`, `creditUnitPrice`, `creditAmount`, `condition`, `restoredToStock`), the
+original delivery, who returned and accepted it, the reason, the cost reversed
+and written off, and the customer's balance before/after. A return is **not a
+refund** — the credit comes off what the customer owes — so there is no
+"payment status" here, the account before/after is the money answer. `404` if
+unknown.
 
 ## `POST /returns`
 
@@ -318,9 +386,20 @@ over-return against a linked line.
 
 ## `GET /payments`
 
-Requires auth **and** `OWNER`/`MANAGER`. History list:
+Requires auth **and** `OWNER`/`MANAGER`. History list, `?from=&to=` paged:
 `{ id, paymentNumber, amount, method, paymentDate, receivedByName,
-isReversed, reverseReason, customer }`.
+isReversed, reverseReason, customer, appliedTo, onAccount }` where `appliedTo`
+is `{ issueId, issueNumber }[]` (the deliveries it paid for) and `onAccount` is
+whatever was not tied to a delivery. `summary` is
+`{ count, collectedAmount, collectedCount, reversedCount }`; reversed payments
+are not counted as collected.
+
+## `GET /payments/:id`
+
+Requires auth **and** `OWNER`/`MANAGER`. The detail page: method, reference,
+who received it, the allocations (each with its delivery's number, date and
+total), `appliedAmount` / `onAccountAmount`, the customer's balance
+before/after, and reversal details. `404` if unknown.
 
 ## `POST /payments`
 
@@ -530,11 +609,16 @@ disagree on what a customer owes.
 
 ## `GET /reports/daily-summary`
 
-Requires auth **and** `OWNER`/`MANAGER`. Query: `?date=YYYY-MM-DD` (default
-today). New this pass. One end-of-day screen: `sales`
-(orders/gross/returns/net), `collections` (by payment method), `purchases`
-(receipt count/total), `wastage` (lines + total), `orders` (every issue that
-day with a Paid/Partial/Unpaid status). Deliberately has **no cash-drawer
+Requires auth **and** `OWNER`/`MANAGER`. Query: `?from=&to=` for a day, a
+week or any period (default today); the original `?date=YYYY-MM-DD` still
+works as a single day. `sales` (orders/gross/returns/net), `collections` (by
+payment method), `purchases` (receipt count/total plus `paid` and `due` on
+those receipts), `wastage` (lines + total). For a **single day** `orders` lists
+every delivery that day with its `payment` state; for a **longer period**
+(`byDay`, up to 93 days) it returns a day-by-day table instead
+(`{ date, orders, sales, returns, collected, purchases }`, bucketed on the
+warehouse clock) and the full listing lives in Sales History. `dayCount`,
+`fromDay` and `toDay` echo the resolved period. Deliberately has **no cash-drawer
 reconciliation section** — nothing in this system tracks an opening float or
 petty-cash expenses, so an "expected vs. counted cash" block would be
 fabricated rather than real; omitted rather than shown as a fake zero.
@@ -567,14 +651,28 @@ subtotal and a `grandTotal`. Returns `ReorderList`.
 
 ## `GET /reports/purchase-register`
 
-Requires auth **and** `OWNER`/`MANAGER`. Query: `?from=&to=`. New this pass.
-Chronological `GoodsReceipt` list with `bySupplier` totals and a
-`priceChanges` section (consecutive `GoodsReceiptLine.unitCostSellUnit`
-values per item, where they differ). Same honest gap as Daily Summary:
-`GoodsReceipt.paidAmount`/`paymentMethod` exist as schema columns but have no
-write path anywhere in this codebase, so nothing here claims to show what's
-been paid to a supplier or what's still outstanding — that figure doesn't
-exist yet. Returns `PurchaseRegister`.
+Requires auth **and** `OWNER`/`MANAGER`. Query: `?from=&to=` (default today).
+Chronological `GoodsReceipt` list — each row with `paidAmount`, `dueAmount` and
+`paymentStatus` — plus `paidTotal`/`dueTotal`, `bySupplier` totals, `items`
+(what was bought, by item: quantity in the purchase unit, average cost, total,
+number of receipts), `lines` (every receipt line, for the Excel "Every line"
+sheet) and a `priceChanges` section (consecutive
+`GoodsReceiptLine.unitCostSellUnit` values per item, where they differ).
+Payment figures only count what was recorded from ADR-009 onwards, so a
+receipt with nothing recorded reads "No payment recorded", never "Unpaid".
+Returns `PurchaseRegister`.
+
+## `GET /reports/sales-history`
+
+Requires auth **and** `OWNER`/`MANAGER`. Query: `?from=&to=` (default today).
+The mirror of Purchase History: every delivery in the period (`rows`, each with
+customer, item count, total and `payment`), complete period `totals`
+(`count, totalAmount, returnedAmount, paidAmount, dueAmount`), an `items`
+table (quantity sold, quantity returned, revenue per item — complete, from a
+`groupBy`) and `lines` (every delivery line, for the Excel "Every line" sheet).
+`rows` are capped at 5,000; `truncated` is `true` when more matched, and the
+totals and `items` are still complete. No cost or margin — that is Profit by
+Item. Returns `SalesHistory`.
 
 ## `GET /reports/wastage-report`
 

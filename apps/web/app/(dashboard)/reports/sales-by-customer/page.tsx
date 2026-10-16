@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DateRangeFilter, defaultRange } from "@/components/reports/date-range";
+import { ReportPeriod } from "@/components/reports/date-range";
+import { todayRange } from "@/lib/period";
 import { ReportToolbar } from "@/components/reports/report-toolbar";
 import { useLetterhead } from "@/components/reports/letterhead";
 import { authFetch, ApiError } from "@/lib/api";
@@ -11,7 +12,7 @@ import { exportReportExcel } from "@/lib/report-excel";
 import type { SalesByCustomerReport } from "@/lib/types";
 
 export default function SalesByCustomerPage() {
-  const [range, setRange] = useState(defaultRange());
+  const [range, setRange] = useState(todayRange());
   const [report, setReport] = useState<SalesByCustomerReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +86,7 @@ export default function SalesByCustomerPage() {
         {report && <ReportToolbar onPrint={openPrint} onPdf={downloadPdf} onExcel={downloadExcel} disabled={loading} />}
       </div>
 
-      <DateRangeFilter from={range.from} to={range.to} onFromChange={(from) => setRange((r) => ({ ...r, from }))} onToChange={(to) => setRange((r) => ({ ...r, to }))} />
+      <ReportPeriod value={range} onChange={setRange} />
 
       {error && <p className="mb-4 rounded-md bg-danger-surface px-3 py-2 text-sm text-danger">{error}</p>}
       {loading && <p className="text-sm text-ink-muted">Loading…</p>}

@@ -7,21 +7,34 @@ import {
   calculateDaysOfCover,
   suggestReorderQty,
   ageLedgerDebits,
+  dayInZone,
+  eachDay,
+  resolvePeriod,
+  summarizeSupplierPayment,
   type DailyUsage,
 } from "@dineiz-supply/logic";
+import { aggregateIssueMoney, loadIssueMoney, paymentSummaryJson } from "../lib/issue-money.js";
+import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
 interface RangeQuery {
   from?: string;
   to?: string;
 }
 
-/** Defaults to the current calendar month when no range is given. */
-function parseDateRange({ from, to }: RangeQuery): { from: Date; to: Date } {
-  const now = new Date();
-  const start = from ? new Date(`${from}T00:00:00.000Z`) : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const end = to ? new Date(`${to}T23:59:59.999Z`) : now;
-  return { from: start, to: end };
+/**
+ * The period a report covers. `from`/`to` are calendar days on the warehouse's
+ * own clock (ADR-009), never UTC days. Missing or invalid bounds mean today, so
+ * a report opened with no range shows today instead of quietly spanning the month.
+ */
+async function reportPeriod(warehouseId: string, { from, to }: RangeQuery) {
+  const timeZone = await getWarehouseTimezone(warehouseId);
+  return { timeZone, ...resolvePeriod(from, to, timeZone) };
 }
+
+/** Largest span for which a day-by-day table is built; longer periods get totals only. */
+const BY_DAY_MAX_DAYS = 93;
+/** Most deliveries listed in one Sales History response; totals are always complete. */
+const SALES_HISTORY_ROW_CAP = 5000;
 
 const REORDER_WINDOW_DAYS = 21;
 
@@ -95,7 +108,7 @@ export default async function reportRoutes(app: FastifyInstance) {
   // worse than an explicit gap note. Losses ARE real, broken out by source.
   app.get<{ Querystring: RangeQuery }>("/reports/profit-loss", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
-    const { from, to } = parseDateRange(request.query);
+    const { from, to } = await reportPeriod(warehouseId, request.query);
     const dateFilter = { gte: from, lte: to };
 
     const [issueTotals, returnTotals, wastageByAttribution, shortages] = await Promise.all([
@@ -172,7 +185,7 @@ export default async function reportRoutes(app: FastifyInstance) {
   // suggested price) and a Slow Moving section (no sales in 30 days).
   app.get<{ Querystring: RangeQuery }>("/reports/item-profitability", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
-    const { from, to } = parseDateRange(request.query);
+    const { from, to } = await reportPeriod(warehouseId, request.query);
 
     const rows = await prisma.issueLine.groupBy({
       by: ["itemId"],
@@ -385,70 +398,132 @@ export default async function reportRoutes(app: FastifyInstance) {
   // in this report: nothing in this system tracks a float or petty-cash
   // expenses yet, so that section is honestly omitted rather than shown with
   // fabricated zeros -- see 07-progress.md for the gap.
-  app.get<{ Querystring: { date?: string } }>("/reports/daily-summary", guard, async (request) => {
+  app.get<{ Querystring: RangeQuery & { date?: string } }>("/reports/daily-summary", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
-    const dateStr = request.query.date ?? new Date().toISOString().slice(0, 10);
-    const dayStart = new Date(`${dateStr}T00:00:00.000Z`);
-    const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
+    // `date` is the original single-day parameter; from/to is the period form.
+    const { date, from: fromParam, to: toParam } = request.query;
+    const { timeZone, fromDay, toDay, from, to } = await reportPeriod(warehouseId, {
+      from: fromParam ?? date,
+      to: toParam ?? date,
+    });
+    const range = { gte: from, lte: to };
+    const days = eachDay(fromDay, toDay, 366);
+    const isSingleDay = fromDay === toDay;
+    const wantsByDay = !isSingleDay && days.length <= BY_DAY_MAX_DAYS;
 
-    const [issues, returns, payments, receipts, wastages] = await Promise.all([
-      prisma.issue.findMany({
-        where: { warehouseId, status: "ISSUED", issuedAt: { gte: dayStart, lte: dayEnd } },
-        select: {
-          id: true,
-          issueNumber: true,
-          totalAmount: true,
-          customer: { select: { name: true } },
-          paymentAllocations: { where: { payment: { isReversed: false } }, select: { amountApplied: true } },
-        },
-        orderBy: { issuedAt: "asc" },
-      }),
+    const issueWhere = { warehouseId, status: "ISSUED" as const, issuedAt: range };
+
+    const [issues, issueTotals, returns, payments, receipts, wastages] = await Promise.all([
+      // The delivery list is for one day only; a longer period gets the day-by-day
+      // table below and the full listing lives in Sales History.
+      isSingleDay
+        ? prisma.issue.findMany({
+            where: issueWhere,
+            select: { id: true, issueNumber: true, issuedAt: true, totalAmount: true, customer: { select: { name: true } } },
+            orderBy: { issuedAt: "asc" },
+          })
+        : Promise.resolve([]),
+      prisma.issue.aggregate({ where: issueWhere, _sum: { totalAmount: true }, _count: true }),
       prisma.returnNote.aggregate({
-        where: { warehouseId, createdAt: { gte: dayStart, lte: dayEnd } },
+        where: { warehouseId, createdAt: range },
         _sum: { totalCreditAmount: true },
         _count: true,
       }),
       prisma.payment.groupBy({
         by: ["method"],
-        where: { warehouseId, isReversed: false, paymentDate: { gte: dayStart, lte: dayEnd } },
+        where: { warehouseId, isReversed: false, paymentDate: range },
         _sum: { amount: true },
       }),
       prisma.goodsReceipt.aggregate({
-        where: { warehouseId, receivedAt: { gte: dayStart, lte: dayEnd } },
-        _sum: { totalAmount: true },
+        where: { warehouseId, receivedAt: range },
+        _sum: { totalAmount: true, paidAmount: true },
         _count: true,
       }),
       prisma.wastage.findMany({
-        where: { warehouseId, createdAt: { gte: dayStart, lte: dayEnd } },
+        where: { warehouseId, createdAt: range },
         select: { qty: true, reason: true, costImpact: true, item: { select: { name: true, sellUnit: { select: { code: true } } } } },
       }),
     ]);
 
-    const grossSales = issues.reduce((sum, i) => sum.plus(i.totalAmount), new Decimal(0));
+    const grossSales = new Decimal(issueTotals._sum.totalAmount ?? 0);
     const returnsTotal = new Decimal(returns._sum.totalCreditAmount ?? 0);
     const netSales = grossSales.minus(returnsTotal);
     const collections = payments.map((p) => ({ method: p.method, amount: new Decimal(p._sum.amount ?? 0).toFixed(2) }));
     const totalCollected = payments.reduce((sum, p) => sum.plus(p._sum.amount ?? 0), new Decimal(0));
     const wastageTotal = wastages.reduce((sum, w) => sum.plus(w.costImpact), new Decimal(0));
+    const purchasesTotal = new Decimal(receipts._sum.totalAmount ?? 0);
+    const purchasesPaid = new Decimal(receipts._sum.paidAmount ?? 0);
 
-    const orderRows = issues.map((i) => {
-      const paid = i.paymentAllocations.reduce((sum, a) => sum.plus(a.amountApplied), new Decimal(0));
-      const total = new Decimal(i.totalAmount);
-      const status = paid.gte(total) ? "Paid" : paid.gt(0) ? "Partial" : "Unpaid";
-      return { issueNumber: i.issueNumber, customerName: i.customer.name, totalAmount: total.toFixed(2), status };
-    });
+    const money = await loadIssueMoney(issues.map((i) => i.id));
+    const orderRows = issues.map((i) => ({
+      id: i.id,
+      issueNumber: i.issueNumber,
+      issuedAt: i.issuedAt.toISOString(),
+      customerName: i.customer.name,
+      totalAmount: new Decimal(i.totalAmount).toFixed(2),
+      payment: paymentSummaryJson(i.totalAmount, money.get(i.id)),
+    }));
+
+    // Day-by-day, bucketed on the warehouse clock so a 01:00 sale lands on the
+    // day the shop saw it. Lean rows, bucketed here; capped by BY_DAY_MAX_DAYS.
+    let byDay: {
+      date: string;
+      orders: number;
+      sales: string;
+      returns: string;
+      collected: string;
+      purchases: string;
+    }[] | null = null;
+    if (wantsByDay) {
+      const [dayIssues, dayReturns, dayPayments, dayReceipts] = await Promise.all([
+        prisma.issue.findMany({ where: issueWhere, select: { issuedAt: true, totalAmount: true } }),
+        prisma.returnNote.findMany({ where: { warehouseId, createdAt: range }, select: { createdAt: true, totalCreditAmount: true } }),
+        prisma.payment.findMany({ where: { warehouseId, isReversed: false, paymentDate: range }, select: { paymentDate: true, amount: true } }),
+        prisma.goodsReceipt.findMany({ where: { warehouseId, receivedAt: range }, select: { receivedAt: true, totalAmount: true } }),
+      ]);
+      const zero = () => ({ orders: 0, sales: new Decimal(0), returns: new Decimal(0), collected: new Decimal(0), purchases: new Decimal(0) });
+      const buckets = new Map(days.map((d) => [d, zero()]));
+      for (const r of dayIssues) {
+        const b = buckets.get(dayInZone(r.issuedAt, timeZone));
+        if (b) { b.orders += 1; b.sales = b.sales.plus(r.totalAmount); }
+      }
+      for (const r of dayReturns) {
+        const b = buckets.get(dayInZone(r.createdAt, timeZone));
+        if (b) b.returns = b.returns.plus(r.totalCreditAmount);
+      }
+      for (const r of dayPayments) {
+        const b = buckets.get(dayInZone(r.paymentDate, timeZone));
+        if (b) b.collected = b.collected.plus(r.amount);
+      }
+      for (const r of dayReceipts) {
+        const b = buckets.get(dayInZone(r.receivedAt, timeZone));
+        if (b) b.purchases = b.purchases.plus(r.totalAmount);
+      }
+      byDay = days.map((d) => {
+        const b = buckets.get(d)!;
+        return { date: d, orders: b.orders, sales: b.sales.toFixed(2), returns: b.returns.toFixed(2), collected: b.collected.toFixed(2), purchases: b.purchases.toFixed(2) };
+      });
+    }
 
     return {
-      date: dateStr,
+      date: fromDay,
+      fromDay,
+      toDay,
+      dayCount: days.length,
       sales: {
-        orderCount: issues.length,
+        orderCount: issueTotals._count,
         grossSales: grossSales.toFixed(2),
         returnCount: returns._count,
         returnsTotal: returnsTotal.toFixed(2),
         netSales: netSales.toFixed(2),
       },
       collections: { byMethod: collections, total: totalCollected.toFixed(2) },
-      purchases: { receiptCount: receipts._count, total: new Decimal(receipts._sum.totalAmount ?? 0).toFixed(2) },
+      purchases: {
+        receiptCount: receipts._count,
+        total: purchasesTotal.toFixed(2),
+        paid: purchasesPaid.toFixed(2),
+        due: Decimal.max(purchasesTotal.minus(purchasesPaid), 0).toFixed(2),
+      },
       wastage: {
         lines: wastages.map((w) => ({
           itemName: w.item.name,
@@ -460,6 +535,7 @@ export default async function reportRoutes(app: FastifyInstance) {
         total: wastageTotal.toFixed(2),
       },
       orders: orderRows,
+      byDay,
     };
   });
 
@@ -616,7 +692,7 @@ export default async function reportRoutes(app: FastifyInstance) {
   // customer owes right now.
   app.get<{ Querystring: RangeQuery }>("/reports/sales-by-customer", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
-    const { from, to } = parseDateRange(request.query);
+    const { from, to } = await reportPeriod(warehouseId, request.query);
     const dateFilter = { gte: from, lte: to };
 
     const [issueRows, returnRows] = await Promise.all([
@@ -787,13 +863,13 @@ export default async function reportRoutes(app: FastifyInstance) {
     return { items: flagged };
   });
 
-  // What was bought, for a period. "Paid"/"Outstanding" columns aren't shown
-  // -- GoodsReceipt.paidAmount has no write path anywhere in this system
-  // (a real gap, not a rounding choice), so every receipt would misleadingly
-  // read as 100% outstanding. Shown honestly as total purchased instead.
+  // What was bought, for a period: every receipt, every item on it, and what
+  // has been paid to the supplier. Payment is only captured from ADR-009
+  // onwards (paid-at-receiving, or settled later from the receipt), so a
+  // receipt with nothing recorded reads "No payment recorded", never "Unpaid".
   app.get<{ Querystring: RangeQuery }>("/reports/purchase-register", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
-    const { from, to } = parseDateRange(request.query);
+    const { from, to } = await reportPeriod(warehouseId, request.query);
 
     const receipts = await prisma.goodsReceipt.findMany({
       where: { warehouseId, receivedAt: { gte: from, lte: to } },
@@ -802,23 +878,81 @@ export default async function reportRoutes(app: FastifyInstance) {
         receiptNumber: true,
         receivedAt: true,
         totalAmount: true,
+        paidAmount: true,
         supplierInvoiceNumber: true,
         supplier: { select: { id: true, name: true } },
-        lines: { select: { id: true } },
+        lines: {
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            itemId: true,
+            qtyInPurchaseUnit: true,
+            unitCostPurchaseUnit: true,
+            lineTotal: true,
+            batchNumber: true,
+            item: { select: { name: true, purchaseUnit: { select: { code: true } } } },
+          },
+        },
       },
       orderBy: { receivedAt: "asc" },
     });
 
-    const rows = receipts.map((r) => ({
-      id: r.id,
-      receiptNumber: r.receiptNumber,
-      receivedAt: r.receivedAt.toISOString(),
-      supplierName: r.supplier.name,
-      invoiceNumber: r.supplierInvoiceNumber,
-      lineCount: r.lines.length,
-      totalAmount: new Decimal(r.totalAmount).toFixed(2),
-    }));
+    const rows = receipts.map((r) => {
+      const pay = summarizeSupplierPayment({ total: r.totalAmount, paid: r.paidAmount });
+      return {
+        id: r.id,
+        receiptNumber: r.receiptNumber,
+        receivedAt: r.receivedAt.toISOString(),
+        supplierName: r.supplier.name,
+        invoiceNumber: r.supplierInvoiceNumber,
+        lineCount: r.lines.length,
+        totalAmount: pay.total.toFixed(2),
+        paidAmount: pay.paid.toFixed(2),
+        dueAmount: pay.due.toFixed(2),
+        paymentStatus: pay.status,
+      };
+    });
     const grandTotal = rows.reduce((sum, r) => sum.plus(r.totalAmount), new Decimal(0));
+    const paidTotal = rows.reduce((sum, r) => sum.plus(r.paidAmount), new Decimal(0));
+
+    // One row per receipt line, for the "every item on every bill" view and Excel.
+    const lineRows = receipts.flatMap((r) =>
+      r.lines.map((l) => ({
+        receiptId: r.id,
+        receiptNumber: r.receiptNumber,
+        receivedAt: r.receivedAt.toISOString(),
+        supplierName: r.supplier.name,
+        itemName: l.item.name,
+        unitCode: l.item.purchaseUnit.code,
+        qty: new Decimal(l.qtyInPurchaseUnit).toFixed(4),
+        unitCost: new Decimal(l.unitCostPurchaseUnit).toFixed(2),
+        lineTotal: new Decimal(l.lineTotal).toFixed(2),
+        batchNumber: l.batchNumber,
+      }))
+    );
+
+    // What was bought, by item, across the period.
+    const byItemMap = new Map<string, { name: string; unitCode: string; qty: Decimal; total: Decimal; receipts: Set<string> }>();
+    for (const r of receipts) {
+      for (const l of r.lines) {
+        const bucket = byItemMap.get(l.itemId) ?? { name: l.item.name, unitCode: l.item.purchaseUnit.code, qty: new Decimal(0), total: new Decimal(0), receipts: new Set<string>() };
+        bucket.qty = bucket.qty.plus(l.qtyInPurchaseUnit);
+        bucket.total = bucket.total.plus(l.lineTotal);
+        bucket.receipts.add(r.id);
+        byItemMap.set(l.itemId, bucket);
+      }
+    }
+    const items = Array.from(byItemMap.entries())
+      .map(([itemId, b]) => ({
+        itemId,
+        name: b.name,
+        unitCode: b.unitCode,
+        qty: b.qty.toFixed(4),
+        total: b.total.toFixed(2),
+        averageCost: b.qty.gt(0) ? b.total.dividedBy(b.qty).toFixed(2) : "0.00",
+        receiptCount: b.receipts.size,
+      }))
+      .sort((a, b) => Number(b.total) - Number(a.total));
 
     const bySupplierMap = new Map<string, { supplierId: string; name: string; total: Decimal }>();
     for (const r of receipts) {
@@ -859,13 +993,110 @@ export default async function reportRoutes(app: FastifyInstance) {
       prevCost = cost;
     }
 
-    return { from: from.toISOString(), to: to.toISOString(), rows, grandTotal: grandTotal.toFixed(2), bySupplier, priceChanges };
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      rows,
+      grandTotal: grandTotal.toFixed(2),
+      paidTotal: paidTotal.toFixed(2),
+      dueTotal: Decimal.max(grandTotal.minus(paidTotal), 0).toFixed(2),
+      bySupplier,
+      items,
+      lines: lineRows,
+      priceChanges,
+    };
+  });
+
+  // What was sold, for a period: every delivery with what has been paid on it,
+  // and the same period by item. The mirror of Purchase History. Cost and
+  // margin are deliberately absent -- that is Profit by Item's job. Totals are
+  // always complete; the delivery list is capped (SALES_HISTORY_ROW_CAP) and
+  // says so when it is.
+  app.get<{ Querystring: RangeQuery }>("/reports/sales-history", guard, async (request) => {
+    const warehouseId = request.user.warehouseId;
+    const { from, to, fromDay, toDay } = await reportPeriod(warehouseId, request.query);
+    const where = { warehouseId, status: "ISSUED" as const, issuedAt: { gte: from, lte: to } };
+
+    const [totals, issues, itemRows] = await Promise.all([
+      aggregateIssueMoney(where),
+      prisma.issue.findMany({
+        where,
+        select: {
+          id: true,
+          issueNumber: true,
+          issuedAt: true,
+          totalAmount: true,
+          customer: { select: { id: true, name: true } },
+          lines: {
+            orderBy: { sortOrder: "asc" },
+            select: { itemName: true, unitCode: true, qty: true, unitPrice: true, lineTotal: true, returnedQty: true },
+          },
+        },
+        orderBy: { issuedAt: "asc" },
+        take: SALES_HISTORY_ROW_CAP,
+      }),
+      prisma.issueLine.groupBy({
+        by: ["itemId"],
+        where: { issue: where },
+        _sum: { qty: true, returnedQty: true, lineTotal: true },
+      }),
+    ]);
+
+    const [money, itemMeta] = await Promise.all([
+      loadIssueMoney(issues.map((i) => i.id)),
+      prisma.item.findMany({
+        where: { id: { in: itemRows.map((r) => r.itemId) } },
+        select: { id: true, name: true, sellUnit: { select: { code: true } } },
+      }),
+    ]);
+    const metaById = new Map(itemMeta.map((i) => [i.id, i]));
+
+    const rows = issues.map((i) => ({
+      id: i.id,
+      issueNumber: i.issueNumber,
+      issuedAt: i.issuedAt.toISOString(),
+      customerId: i.customer.id,
+      customerName: i.customer.name,
+      lineCount: i.lines.length,
+      totalAmount: new Decimal(i.totalAmount).toFixed(2),
+      payment: paymentSummaryJson(i.totalAmount, money.get(i.id)),
+    }));
+
+    const lines = issues.flatMap((i) =>
+      i.lines.map((l) => ({
+        issueNumber: i.issueNumber,
+        issuedAt: i.issuedAt.toISOString(),
+        customerName: i.customer.name,
+        itemName: l.itemName,
+        unitCode: l.unitCode,
+        qty: new Decimal(l.qty).toFixed(4),
+        unitPrice: new Decimal(l.unitPrice).toFixed(2),
+        lineTotal: new Decimal(l.lineTotal).toFixed(2),
+        returnedQty: new Decimal(l.returnedQty).toFixed(4),
+      }))
+    );
+
+    const items = itemRows
+      .map((r) => {
+        const meta = metaById.get(r.itemId);
+        return {
+          itemId: r.itemId,
+          name: meta?.name ?? "(deleted item)",
+          unitCode: meta?.sellUnit.code ?? "",
+          qty: new Decimal(r._sum.qty ?? 0).toFixed(4),
+          returnedQty: new Decimal(r._sum.returnedQty ?? 0).toFixed(4),
+          revenue: new Decimal(r._sum.lineTotal ?? 0).toFixed(2),
+        };
+      })
+      .sort((a, b) => Number(b.revenue) - Number(a.revenue));
+
+    return { fromDay, toDay, truncated: totals.count > issues.length, rows, totals, items, lines };
   });
 
   // What was lost, for a period, and why.
   app.get<{ Querystring: RangeQuery }>("/reports/wastage-report", guard, async (request) => {
     const warehouseId = request.user.warehouseId;
-    const { from, to } = parseDateRange(request.query);
+    const { from, to, fromDay, toDay, timeZone } = await reportPeriod(warehouseId, request.query);
 
     const wastages = await prisma.wastage.findMany({
       where: { warehouseId, createdAt: { gte: from, lte: to } },
@@ -915,18 +1146,15 @@ export default async function reportRoutes(app: FastifyInstance) {
       })
       .sort((a, b) => Number(b.total) - Number(a.total));
 
-    const dayCount = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
     const dailyTotals = new Map<string, Decimal>();
     for (const w of wastages) {
-      const key = w.createdAt.toISOString().slice(0, 10);
+      const key = dayInZone(w.createdAt, timeZone);
       dailyTotals.set(key, (dailyTotals.get(key) ?? new Decimal(0)).plus(w.costImpact));
     }
-    const dailyTrend: { date: string; total: string }[] = [];
-    for (let i = 0; i < dayCount && i < 62; i++) {
-      const d = new Date(from.getTime() + i * 86_400_000);
-      const key = d.toISOString().slice(0, 10);
-      dailyTrend.push({ date: key, total: (dailyTotals.get(key) ?? new Decimal(0)).toFixed(2) });
-    }
+    const dailyTrend = eachDay(fromDay, toDay, 62).map((key) => ({
+      date: key,
+      total: (dailyTotals.get(key) ?? new Decimal(0)).toFixed(2),
+    }));
 
     let observation: string | null = null;
     if (byItem.length > 0) {

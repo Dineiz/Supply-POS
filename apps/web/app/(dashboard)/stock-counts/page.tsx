@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DatePresetFilter, type DateRange } from "@/components/filters/date-preset-filter";
+import { PeriodEmpty } from "@/components/filters/period-empty";
 import { Pagination } from "@/components/filters/pagination";
 import { authFetch, ApiError } from "@/lib/api";
 import { buildListQuery, type ListResponse } from "@/lib/list-query";
 import { formatMoney, formatDate } from "@/lib/format";
+import { todayRange } from "@/lib/period";
 import type { StockCountSessionListItem } from "@/lib/types";
 
 const TYPE_LABELS: Record<string, string> = { FULL: "Full", PARTIAL: "By category", SPOT: "Spot" };
@@ -23,7 +25,7 @@ export default function StockCountsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [range, setRange] = useState<DateRange | null>(null);
+  const [range, setRange] = useState<DateRange | null>(todayRange);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -82,8 +84,8 @@ export default function StockCountsPage() {
               )}
               {!loading && sessions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-ink-muted">
-                    No stock counts yet.
+                  <td colSpan={7}>
+                    <PeriodEmpty noun="stock counts" range={range} onChange={setRange} />
                   </td>
                 </tr>
               )}
