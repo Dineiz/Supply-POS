@@ -58,8 +58,22 @@ export default function CounterPage() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
 
-  const { items, customers, catalogueLoaded, setCatalogue, customerId, setCustomerId, lines, addItem, incrementLine, decrementLine, setLineQty, setLineUnitPrice, removeLine, clearCart } =
-    useCounterStore();
+  const {
+    items,
+    customers,
+    catalogueLoaded,
+    setCatalogue,
+    customerId,
+    setCustomerId,
+    lines,
+    addItem,
+    incrementLine,
+    decrementLine,
+    setLineQty,
+    setLineUnitPrice,
+    removeLine,
+    clearCart,
+  } = useCounterStore();
 
   useEffect(() => {
     const sessionUser = getSessionUser();
@@ -128,13 +142,12 @@ export default function CounterPage() {
     setSubmitting(true);
     setBlock(null);
 
-    // Pre-open print window synchronously within the user gesture so mobile and desktop browsers don't block it as a popup.
     const printWin = typeof window !== "undefined" ? window.open("", "_blank") : null;
     if (printWin) {
       try {
         printWin.document.title = "Preparing receipt…";
       } catch {
-        // Ignore cross-origin access restriction if any
+        // Safe cross-origin
       }
     }
 
@@ -148,6 +161,7 @@ export default function CounterPage() {
           override: override ?? undefined,
         }),
       });
+
       setLastIssue(result);
 
       if (printWin && !printWin.closed) {
@@ -190,36 +204,45 @@ export default function CounterPage() {
     <div className="flex-1 overflow-y-auto px-4 py-2">
       {lines.length === 0 && <p className="py-8 text-center text-sm text-ink-faint">No items yet</p>}
       {lines.map((line) => (
-        <div key={line.itemId} className="flex items-center justify-between gap-3 border-b border-border py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink">{line.name}</p>
-            {line.nameUrdu && (
-              <p className="font-urdu text-sm font-bold text-accent" dir="rtl">
-                {line.nameUrdu}
-              </p>
-            )}
-            <p className="font-tabular mt-0.5 flex items-center gap-1 text-xs text-ink-muted">
-              <PriceEditor unitPrice={line.unitPrice} onSetPrice={(price) => setLineUnitPrice(line.itemId, price)} />
-              <span>/{formatUnitCode(line.unitCode)} = {formatMoney(line.qty * line.unitPrice)}</span>
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <QtyStepper
-              qty={line.qty}
-              unitCode={line.unitCode}
-              fractional={line.fractional}
-              size="spacious"
-              onIncrement={() => incrementLine(line.itemId)}
-              onDecrement={() => decrementLine(line.itemId)}
-              onSetQty={(qty) => setLineQty(line.itemId, qty)}
-            />
+        <div key={line.itemId} className="border-b border-border py-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-ink">{line.name}</p>
+              {line.nameUrdu && (
+                <p className="font-urdu text-sm font-bold text-accent" dir="rtl">
+                  {line.nameUrdu}
+                </p>
+              )}
+            </div>
             <button
               onClick={() => removeLine(line.itemId)}
-              className="text-ink-faint hover:text-danger"
-              aria-label="Remove"
+              className="p-1 text-ink-faint hover:text-danger text-sm"
+              aria-label="Remove item"
             >
               ✕
             </button>
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 font-tabular text-xs text-ink-muted">
+              <PriceEditor unitPrice={line.unitPrice} onSetPrice={(price) => setLineUnitPrice(line.itemId, price)} />
+              <span>/{formatUnitCode(line.unitCode)}</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <QtyStepper
+                qty={line.qty}
+                unitCode={line.unitCode}
+                fractional={line.fractional}
+                size="compact"
+                onIncrement={() => incrementLine(line.itemId)}
+                onDecrement={() => decrementLine(line.itemId)}
+                onSetQty={(qty) => setLineQty(line.itemId, qty)}
+              />
+              <span className="font-tabular text-sm font-semibold text-ink min-w-[4rem] text-right">
+                {formatMoney(line.qty * line.unitPrice)}
+              </span>
+            </div>
           </div>
         </div>
       ))}
@@ -227,31 +250,31 @@ export default function CounterPage() {
   );
 
   const cartSummary = (
-    <div className="border-t border-border px-4 py-3">
-      <div className="space-y-1 text-sm">
+    <div className="border-t border-border px-4 py-3 bg-paper">
+      <div className="space-y-1.5 text-sm">
         <div className="flex justify-between text-ink-muted">
           <span>Subtotal</span>
-          <span className="font-tabular">{formatMoney(subtotal)}</span>
+          <span className="font-tabular font-medium text-ink">{formatMoney(subtotal)}</span>
         </div>
         {customerDiscount > 0 && (
           <div className="flex justify-between text-ink-muted">
-            <span>Discount</span>
+            <span>Discount ({customer?.discountPercent}%)</span>
             <span className="font-tabular">−{formatMoney(customerDiscount)}</span>
           </div>
         )}
-        <div className="flex justify-between text-base font-semibold text-ink">
+        <div className="flex justify-between text-base font-bold text-ink border-t border-border pt-1.5">
           <span>Total</span>
           <span className="font-tabular">{formatMoney(total)}</span>
         </div>
       </div>
 
       {customer && lines.length > 0 && (
-        <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-ink-muted">
+        <div className="mt-2.5 space-y-1 border-t border-border pt-2 text-xs text-ink-muted">
           <div className="flex justify-between">
             <span>Previous balance</span>
             <span className="font-tabular">{formatMoney(previousBalance)}</span>
           </div>
-          <div className="flex justify-between font-medium text-ink">
+          <div className="flex justify-between font-semibold text-ink">
             <span>New balance</span>
             <span className="font-tabular">{formatMoney(newBalance)}</span>
           </div>
@@ -316,6 +339,7 @@ export default function CounterPage() {
       >
         {submitting ? "Sending…" : printMultipleTickets ? "Deliver & Print Multiple" : "Deliver & Print"}
       </Button>
+
       <div className="mt-2 grid grid-cols-3 gap-2">
         <Button
           type="button"
@@ -343,7 +367,7 @@ export default function CounterPage() {
   return (
     <div className="flex h-screen flex-col bg-surface">
       <header className="flex items-center justify-between border-b border-border bg-paper px-4 py-3">
-        <Logo variant="wordmark" theme="light" className="h-8" />
+        <Logo variant="wordmark" theme="light" className="h-7 w-auto" />
         <div className="flex items-center gap-3">
           {(user.role === "OWNER" || user.role === "MANAGER") && (
             <a href="/items" className="text-sm font-medium text-ink-muted hover:text-ink">
@@ -364,7 +388,9 @@ export default function CounterPage() {
                 <div className="absolute right-0 top-11 z-50 w-48 overflow-hidden rounded-lg border border-border bg-paper shadow-lg">
                   <div className="border-b border-border px-3 py-2.5">
                     <p className="truncate text-sm font-medium text-ink">{user.name}</p>
-                    <p className="text-xs text-ink-faint">{user.role === "OWNER" ? "Owner" : user.role === "MANAGER" ? "Manager" : "Clerk"}</p>
+                    <p className="text-xs text-ink-faint">
+                      {user.role === "OWNER" ? "Owner" : user.role === "MANAGER" ? "Manager" : "Clerk"}
+                    </p>
                   </div>
                   <button
                     onClick={handleLogout}
@@ -444,6 +470,7 @@ export default function CounterPage() {
               const isLow = !isOut && minStock !== null && stock <= minStock;
               const cartLine = lines.find((l) => l.itemId === item.id);
               const inCart = !!cartLine;
+
               return (
                 <div
                   key={item.id}

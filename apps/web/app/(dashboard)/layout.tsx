@@ -60,7 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!user) return null;
 
   const navLinks = (
-    <nav className="flex-1 space-y-0.5 p-3">
+    <nav className="flex-1 space-y-1 p-3">
       {NAV.filter((item) => !item.ownerOnly || user.role === "OWNER").map((item) => {
         const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
@@ -79,12 +79,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   const userFooter = (
-    <div className="border-t border-border p-3">
-      <p className="truncate px-2 text-xs font-medium text-ink">{user.name}</p>
-      <p className="px-2 text-xs text-ink-faint">{user.role === "OWNER" ? "Owner" : "Manager"}</p>
+    <div className="border-t border-border p-4">
+      <p className="truncate text-xs font-semibold text-ink">{user.name}</p>
+      <p className="text-xs text-ink-faint">{user.role === "OWNER" ? "Owner" : "Manager"}</p>
       <button
         onClick={handleLogout}
-        className="mt-2 w-full rounded-md px-2 py-1.5 text-left text-xs text-ink-muted hover:bg-surface hover:text-ink"
+        className="mt-2 text-xs text-ink-muted hover:text-ink font-medium transition-colors"
       >
         Sign out
       </button>
@@ -93,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen flex-col bg-surface md:flex-row">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-paper px-3 py-3 md:hidden">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-paper px-4 py-3 md:hidden">
         <button
           onClick={() => setMenuOpen(true)}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-xl text-ink-muted hover:bg-surface hover:text-ink"
@@ -101,12 +101,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         >
           ☰
         </button>
-        <Logo variant="wordmark" theme="light" className="h-9" />
+        <Logo variant="wordmark" theme="light" className="h-7 w-auto" />
       </header>
 
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-paper md:flex">
         <div className="flex items-center border-b border-border px-5 py-4">
-          <Logo variant="wordmark" theme="light" className="h-11" />
+          <Logo variant="wordmark" theme="light" className="h-7 w-auto" />
         </div>
         {navLinks}
         {userFooter}
@@ -114,12 +114,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {menuOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden" onClick={() => setMenuOpen(false)}>
-          <div className="flex h-full w-64 flex-col bg-paper" onClick={(e) => e.stopPropagation()}>
-            <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-3">
-              <span className="px-2 text-sm font-medium text-ink-muted">Menu</span>
+          <div className="flex h-full w-64 flex-col bg-paper shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+              <span className="text-sm font-medium text-ink-muted">Menu</span>
               <button
                 onClick={() => setMenuOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-md text-lg text-ink-muted hover:bg-surface hover:text-ink"
+                className="flex h-8 w-8 items-center justify-center rounded-md text-ink-muted hover:bg-surface hover:text-ink"
                 aria-label="Close menu"
               >
                 ✕
