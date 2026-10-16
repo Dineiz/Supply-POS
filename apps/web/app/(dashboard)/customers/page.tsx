@@ -112,7 +112,11 @@ export default function CustomersPage() {
                     {c.code && <p className="text-xs text-ink-faint">{c.code}</p>}
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{TYPE_LABEL[c.type]}</td>
-                  <td className="font-tabular px-4 py-3 text-right text-ink">{formatMoney(balance)}</td>
+                  <td className="font-tabular px-4 py-3 text-right">
+                    <span className={balance > 0 ? "font-semibold text-ink" : "text-ink-muted"}>
+                      {formatMoney(balance)}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${

@@ -140,12 +140,12 @@ export default function ItemsPage() {
                     {item.nameUrdu && <p className="text-xs text-accent font-urdu font-semibold">{item.nameUrdu}</p>}
                   </td>
                   <td className="px-4 py-3 text-ink-muted">{item.category?.name ?? "—"}</td>
-                  <td
-                    className={`font-tabular px-4 py-3 text-right ${
-                      isOut ? "text-danger" : isLow ? "text-warning" : "text-ink"
-                    }`}
-                  >
-                    {stock} {formatUnitCode(item.unitCode)}
+                  <td className="font-tabular px-4 py-3 text-right">
+                    <span className={isOut ? "font-semibold text-danger" : isLow ? "font-semibold text-warning" : "text-ink"}>
+                      {stock} {formatUnitCode(item.unitCode)}
+                    </span>
+                    {isOut && <span className="ml-1.5 inline-block text-[11px] font-semibold text-danger bg-danger-surface px-1.5 py-0.5 rounded">Out</span>}
+                    {isLow && <span className="ml-1.5 inline-block text-[11px] font-semibold text-warning bg-warning-surface px-1.5 py-0.5 rounded">Low</span>}
                   </td>
                   <td className="font-tabular px-4 py-3 text-right text-ink-muted">{formatMoney(cost)}</td>
                   <td className="font-tabular px-4 py-3 text-right text-ink">{formatMoney(price)}</td>
