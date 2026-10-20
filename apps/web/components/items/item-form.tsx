@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { QuickAddStockModal } from "@/components/items/quick-add-stock-modal";
 import { authFetch, ApiError } from "@/lib/api";
 import { formatMoney, formatQtyOnly } from "@/lib/format";
@@ -71,6 +72,10 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAddStock, setShowAddStock] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAdjustStock, setShowAdjustStock] = useState(false);
+  const [targetStock, setTargetStock] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -91,6 +96,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         if (mode === "edit" && itemId) {
           const item = await authFetch<Item>(`/items/${itemId}`);
           setExisting(item);
+          const isSame = item.purchaseUnit.id === item.sellUnit.id || item.purchaseUnit.code === item.sellUnit.code;
           setForm({
             name: item.name,
             nameUrdu: item.nameUrdu ?? "",
@@ -99,7 +105,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             categoryId: item.category?.id ?? "",
             purchaseUnitId: item.purchaseUnit.id,
             sellUnitId: item.sellUnit.id,
-            purchaseToSellFactor: item.purchaseToSellFactor,
+            purchaseToSellFactor: isSame ? "1" : item.purchaseToSellFactor,
             baseSellPrice: item.price,
             marginFloorPercent: item.marginFloorPercent ?? "",
             minStockQty: item.minStockQty ?? "",
@@ -132,11 +138,14 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     setSubmitting(true);
     setError(null);
 
+    const isSame = form.purchaseUnitId === form.sellUnitId;
+    const factorNum = isSame ? 1 : (Number(form.purchaseToSellFactor) || 1);
+
     const basePayload = {
-      name: form.name,
-      nameUrdu: form.nameUrdu || null,
-      sku: form.sku || null,
-      barcode: form.barcode || null,
+      name: form.name.trim(),
+      nameUrdu: form.nameUrdu.trim() || null,
+      sku: form.sku.trim() || null,
+      barcode: form.barcode.trim() || null,
       categoryId: form.categoryId || null,
       baseSellPrice: Number(form.baseSellPrice),
       marginFloorPercent: form.marginFloorPercent ? Number(form.marginFloorPercent) : null,
@@ -146,7 +155,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       isPerishable: form.isPerishable,
       shelfLifeDays: form.isPerishable && form.shelfLifeDays ? Number(form.shelfLifeDays) : null,
       returnWindowHours: form.isPerishable && form.returnWindowHours ? Number(form.returnWindowHours) : null,
-      location: form.location || null,
+      location: form.location.trim() || null,
+      purchaseToSellFactor: factorNum,
     };
 
     try {
@@ -157,7 +167,6 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             ...basePayload,
             purchaseUnitId: form.purchaseUnitId,
             sellUnitId: form.sellUnitId,
-            purchaseToSellFactor: Number(form.purchaseToSellFactor),
             openingQtyPurchaseUnit: form.openingQtyPurchaseUnit ? Number(form.openingQtyPurchaseUnit) : undefined,
             openingExtraQty: form.openingExtraQty ? Number(form.openingExtraQty) : undefined,
             openingUnitCostPurchaseUnit: form.openingUnitCost ? Number(form.openingUnitCost) : undefined,
@@ -190,6 +199,42 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     }
   }
 
+  async function handleDelete() {
+    if (!itemId) return;
+    setSubmitting(true);
+    try {
+      await authFetch(`/items/${itemId}`, { method: "DELETE" });
+      router.push("/items");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not delete the item.");
+      setShowDeleteConfirm(false);
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAdjustStock(e: React.FormEvent) {
+    e.preventDefault();
+    if (!itemId || targetStock === "") return;
+    setSubmitting(true);
+    try {
+      const updated = await authFetch<Item>(`/items/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          currentStockQty: Number(targetStock),
+          stockAdjustmentReason: adjustReason.trim() || "Stock correction",
+        }),
+      });
+      setExisting(updated);
+      setShowAdjustStock(false);
+      setTargetStock("");
+      setAdjustReason("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not adjust stock.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleStockAdded() {
     setShowAddStock(false);
     if (!itemId) return;
@@ -197,8 +242,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       const item = await authFetch<Item>(`/items/${itemId}`);
       setExisting(item);
     } catch {
-      // Non-fatal: the add-stock call already succeeded. The displayed
-      // stock/cost will just be stale until the page is next reloaded.
+      // Non-fatal
     }
   }
 
@@ -223,7 +267,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         {mode === "edit" && existing && (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             <p className="font-tabular text-sm text-ink-muted">
-              Current stock: {existing.stockQty} {existing.unitCode.toLowerCase()} · Avg cost:{" "}
+              Current stock: <strong>{existing.stockQty} {existing.unitCode.toLowerCase()}</strong> · Avg cost:{" "}
               {formatMoney(existing.avgCost)}/{existing.unitCode.toLowerCase()}
             </p>
             <button
@@ -232,6 +276,16 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
               className="text-sm font-medium text-accent hover:underline"
             >
               + Add stock
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTargetStock(existing.stockQty);
+                setShowAdjustStock(true);
+              }}
+              className="text-sm font-medium text-ink-muted hover:text-ink hover:underline"
+            >
+              Adjust stock
             </button>
           </div>
         )}
@@ -275,7 +329,11 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           <Field label="How do you buy this?">
             <select
               value={form.purchaseUnitId}
-              onChange={(e) => set("purchaseUnitId", e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                set("purchaseUnitId", nextId);
+                if (nextId === form.sellUnitId) set("purchaseToSellFactor", "1");
+              }}
               disabled={mode === "edit"}
               className="h-11 w-full rounded-md border border-border-strong bg-paper px-3 text-sm text-ink disabled:bg-surface disabled:text-ink-muted"
             >
@@ -289,7 +347,11 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           <Field label="How do you sell this?">
             <select
               value={form.sellUnitId}
-              onChange={(e) => set("sellUnitId", e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                set("sellUnitId", nextId);
+                if (form.purchaseUnitId === nextId) set("purchaseToSellFactor", "1");
+              }}
               disabled={mode === "edit"}
               className="h-11 w-full rounded-md border border-border-strong bg-paper px-3 text-sm text-ink disabled:bg-surface disabled:text-ink-muted"
             >
@@ -301,27 +363,48 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             </select>
           </Field>
         </div>
-        <Field label="How many is that?" hint="Example: if you buy in bags but sell in kg, how many kg are in one bag?">
-          <Input
-            type="number"
-            step="any"
-            min="0"
-            value={form.purchaseToSellFactor}
-            onChange={(e) => set("purchaseToSellFactor", e.target.value)}
-            disabled={mode === "edit"}
-            className="disabled:bg-surface disabled:text-ink-muted"
-          />
-        </Field>
-        {purchaseUnit && sellUnit && Number(form.purchaseToSellFactor) > 0 && (
-          <p className="font-tabular text-sm text-ink-muted">
-            1 {purchaseUnit.code} = {form.purchaseToSellFactor} {sellUnit.code}
-          </p>
-        )}
-        {mode === "edit" && (
-          <p className="text-xs text-ink-faint">
-            Units can&apos;t be changed after stock exists — it would silently reinterpret the quantity on
-            hand. Deactivate this item and create a new one if the unit is wrong.
-          </p>
+
+        {!hasConversion ? (
+          <div className="rounded-md border border-border bg-surface p-3 text-xs text-ink-muted">
+            <p className="font-semibold text-ink">
+              ✓ Same unit: 1 {purchaseUnit?.code ?? "unit"} = 1 {sellUnit?.code ?? "unit"}
+            </p>
+            <p className="mt-0.5 text-ink-faint">
+              You buy and sell this item in the same unit. No conversion factor is needed.
+            </p>
+            {mode === "edit" && Number(form.purchaseToSellFactor) !== 1 && (
+              <div className="mt-2 flex items-center justify-between rounded bg-warning-surface p-2 text-warning">
+                <span>The stored unit factor was {form.purchaseToSellFactor}. Reset it to 1:1?</span>
+                <button
+                  type="button"
+                  onClick={() => set("purchaseToSellFactor", "1")}
+                  className="rounded bg-accent px-2 py-0.5 text-xs font-semibold text-white"
+                >
+                  Reset to 1
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            <Field
+              label={`How many ${sellUnit?.code ?? "sell units"} are in 1 ${purchaseUnit?.code ?? "purchase unit"}?`}
+              hint={`Example: if 1 ${purchaseUnit?.code} has 50 ${sellUnit?.code}, enter 50.`}
+            >
+              <Input
+                type="number"
+                step="any"
+                min="0.0001"
+                value={form.purchaseToSellFactor}
+                onChange={(e) => set("purchaseToSellFactor", e.target.value)}
+              />
+            </Field>
+            {purchaseUnit && sellUnit && Number(form.purchaseToSellFactor) > 0 && (
+              <p className="font-tabular mt-1.5 text-sm text-ink-muted">
+                1 {purchaseUnit.code} = {form.purchaseToSellFactor} {sellUnit.code}
+              </p>
+            )}
+          </div>
         )}
       </Section>
 
@@ -474,11 +557,22 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       </Section>
 
       <div className="flex items-center justify-between border-t border-border pt-6">
-        <div>
+        <div className="flex items-center gap-2">
           {mode === "edit" && existing && (
-            <Button type="button" variant="secondary" onClick={toggleActive} disabled={submitting}>
-              {existing.isActive ? "Deactivate" : "Reactivate"}
-            </Button>
+            <>
+              <Button type="button" variant="secondary" onClick={toggleActive} disabled={submitting}>
+                {existing.isActive ? "Deactivate" : "Reactivate"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={submitting}
+                className="text-danger hover:bg-danger-surface hover:text-danger"
+              >
+                Delete item
+              </Button>
+            </>
           )}
         </div>
         <div className="flex gap-2">
@@ -498,6 +592,82 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         onClose={() => setShowAddStock(false)}
         onSaved={handleStockAdded}
       />
+    )}
+    {showDeleteConfirm && existing && (
+      <Modal title={`Delete ${existing.name}`} onClose={() => setShowDeleteConfirm(false)}>
+        <div className="space-y-4 p-4">
+          <p className="text-sm text-ink">
+            Are you sure you want to delete <strong>{existing.name}</strong>?
+          </p>
+          <p className="text-xs text-ink-muted leading-relaxed">
+            This will remove the item from your catalogue and sales counter. Historical invoices, receipts, and reports
+            will be preserved for bookkeeping. The item name and barcode will be freed up.
+          </p>
+          {Number(existing.stockQty) > 0 && (
+            <div className="rounded-md bg-warning-surface p-2.5 text-xs text-warning border border-warning/30">
+              ⚠️ Note: This item currently shows <strong>{existing.stockQty} {existing.unitCode.toLowerCase()}</strong> in stock.
+            </div>
+          )}
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <Button type="button" variant="ghost" onClick={() => setShowDeleteConfirm(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDelete}
+              disabled={submitting}
+              className="bg-danger text-white hover:bg-danger/90"
+            >
+              {submitting ? "Deleting…" : "Yes, delete item"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    {showAdjustStock && existing && (
+      <Modal title={`Adjust Stock — ${existing.name}`} onClose={() => setShowAdjustStock(false)}>
+        <form onSubmit={handleAdjustStock} className="space-y-4 p-4">
+          <p className="text-xs text-ink-muted">
+            Use this to correct any inventory counting errors or distorted stock numbers (e.g. from accidental barcode scans).
+          </p>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-muted">
+              Current recorded stock: <strong>{existing.stockQty} {existing.unitCode.toLowerCase()}</strong>
+            </label>
+            <label className="mb-1 block text-xs font-medium text-ink-muted">
+              Correct actual stock ({existing.unitCode.toLowerCase()})
+            </label>
+            <Input
+              type="number"
+              step="any"
+              min="0"
+              value={targetStock}
+              onChange={(e) => setTargetStock(e.target.value)}
+              placeholder="e.g. 10"
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink-muted">
+              Reason for adjustment <span className="text-ink-faint">(optional)</span>
+            </label>
+            <Input
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+              placeholder="e.g. Correct barcode scan / inventory recount"
+            />
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <Button type="button" variant="ghost" onClick={() => setShowAdjustStock(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Saving…" : "Save adjustment"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     )}
     </>
   );

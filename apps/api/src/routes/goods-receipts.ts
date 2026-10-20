@@ -279,7 +279,8 @@ export default async function goodsReceiptRoutes(app: FastifyInstance) {
 
       const resolvedLines = body.lines.map((line) => {
         const item = itemsById.get(line.itemId)!;
-        const factor = new Decimal(item.purchaseToSellFactor);
+        const isSameUnit = item.purchaseUnitId === item.sellUnitId;
+        const factor = isSameUnit ? new Decimal(1) : new Decimal(item.purchaseToSellFactor);
         const qtyInPurchaseUnit = new Decimal(line.qtyInPurchaseUnit);
         const unitCostPurchaseUnit = new Decimal(line.unitCostPurchaseUnit);
         const qtyInSellUnit = qtyInPurchaseUnit.times(factor);

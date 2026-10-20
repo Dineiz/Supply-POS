@@ -109,20 +109,34 @@ interface UpdateItemBody {
   imageUrl?: string | null;
   location?: string | null;
   isActive?: boolean;
+  purchaseToSellFactor?: number;
+  currentStockQty?: number;
+  avgCostPerUnit?: number;
+  stockAdjustmentReason?: string;
 }
 
 export default async function itemRoutes(app: FastifyInstance) {
-  app.get<{ Querystring: { includeInactive?: string } }>(
+  app.get<{ Querystring: { includeInactive?: string; status?: "ALL" | "ACTIVE" | "INACTIVE" } }>(
     "/items",
     { preHandler: [app.authenticate] },
     async (request) => {
-      const includeInactive = request.query.includeInactive === "true";
+      const includeInactive = request.query.includeInactive === "true" || request.query.status === "ALL";
+      const status = request.query.status;
+      const where: Prisma.ItemWhereInput = {
+        warehouseId: request.user.warehouseId,
+        isDeleted: false,
+      };
+
+      if (status === "INACTIVE") {
+        where.isActive = false;
+      } else if (status === "ACTIVE") {
+        where.isActive = true;
+      } else if (!includeInactive) {
+        where.isActive = true;
+      }
+
       const items = await prisma.item.findMany({
-        where: {
-          warehouseId: request.user.warehouseId,
-          isDeleted: false,
-          ...(includeInactive ? {} : { isActive: true }),
-        },
+        where,
         select: ITEM_LIST_SELECT,
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       });
@@ -151,7 +165,50 @@ export default async function itemRoutes(app: FastifyInstance) {
       }
 
       const warehouseId = request.user.warehouseId;
-      const factor = new Decimal(body.purchaseToSellFactor ?? 1);
+      const trimmedName = body.name.trim();
+
+      // Check if an item with this name already exists in this warehouse
+      const existingConflict = await prisma.item.findFirst({
+        where: { warehouseId, name: trimmedName },
+      });
+
+      if (existingConflict) {
+        if (existingConflict.isDeleted) {
+          // The old item was deleted, but PostgreSQL unique constraint still sees the name.
+          // Rename the old soft-deleted item so the user can use the name cleanly!
+          await prisma.item.update({
+            where: { id: existingConflict.id },
+            data: {
+              name: `${existingConflict.name} [deleted ${existingConflict.id.slice(-6)}]`,
+              sku: existingConflict.sku ? `${existingConflict.sku}_del_${existingConflict.id.slice(-4)}` : null,
+              barcode: null,
+            },
+          });
+        } else if (!existingConflict.isActive) {
+          return reply.code(409).send({
+            message: `An item named "${trimmedName}" already exists but is currently deactivated. You can find it under Inactive items and reactivate it.`,
+            inactiveItemId: existingConflict.id,
+          });
+        } else {
+          return reply.code(409).send({ message: `An item named "${trimmedName}" already exists.` });
+        }
+      }
+
+      // Check for barcode conflict if barcode is provided
+      if (body.barcode?.trim()) {
+        const barcodeConflict = await prisma.item.findFirst({
+          where: { warehouseId, barcode: body.barcode.trim(), isDeleted: false },
+        });
+        if (barcodeConflict) {
+          return reply.code(409).send({
+            message: `Barcode "${body.barcode.trim()}" is already assigned to item "${barcodeConflict.name}".`,
+          });
+        }
+      }
+
+      // If purchase unit and sell unit are identical, factor is strictly 1:1.
+      const isSameUnit = body.purchaseUnitId === body.sellUnitId;
+      const factor = isSameUnit ? new Decimal(1) : new Decimal(body.purchaseToSellFactor ?? 1);
 
       // Opening stock is entered the way a shopkeeper actually counts it --
       // full purchase units (bags/sacks) they have on hand, plus any loose
@@ -170,14 +227,14 @@ export default async function itemRoutes(app: FastifyInstance) {
           const created = await tx.item.create({
             data: {
               warehouseId,
-              name: body.name,
-              nameUrdu: body.nameUrdu,
-              sku: body.sku,
-              barcode: body.barcode,
-              categoryId: body.categoryId,
+              name: trimmedName,
+              nameUrdu: body.nameUrdu?.trim() || null,
+              sku: body.sku?.trim() || null,
+              barcode: body.barcode?.trim() || null,
+              categoryId: body.categoryId || null,
               purchaseUnitId: body.purchaseUnitId,
               sellUnitId: body.sellUnitId,
-              purchaseToSellFactor: body.purchaseToSellFactor ?? 1,
+              purchaseToSellFactor: isSameUnit ? 1 : (body.purchaseToSellFactor ?? 1),
               baseSellPrice: body.baseSellPrice,
               marginFloorPercent: body.marginFloorPercent,
               minStockQty: body.minStockQty,
@@ -186,7 +243,7 @@ export default async function itemRoutes(app: FastifyInstance) {
               isPerishable: body.isPerishable ?? false,
               shelfLifeDays: body.shelfLifeDays,
               returnWindowHours: body.returnWindowHours,
-              preferredSupplierId: body.preferredSupplierId,
+              preferredSupplierId: body.preferredSupplierId || null,
               sortOrder: body.sortOrder ?? 0,
               imageUrl: body.imageUrl,
               location: body.location,
@@ -250,30 +307,112 @@ export default async function itemRoutes(app: FastifyInstance) {
       if (!existing) return reply.code(404).send({ message: "Item not found." });
 
       const body = request.body ?? {};
+
+      // Check name conflict if name is being changed
+      if (body.name && body.name.trim() !== existing.name) {
+        const trimmedName = body.name.trim();
+        const conflict = await prisma.item.findFirst({
+          where: { warehouseId, name: trimmedName, id: { not: existing.id } },
+        });
+        if (conflict) {
+          if (conflict.isDeleted) {
+            await prisma.item.update({
+              where: { id: conflict.id },
+              data: {
+                name: `${conflict.name} [deleted ${conflict.id.slice(-6)}]`,
+                sku: conflict.sku ? `${conflict.sku}_del_${conflict.id.slice(-4)}` : null,
+                barcode: null,
+              },
+            });
+          } else if (!conflict.isActive) {
+            return reply.code(409).send({
+              message: `An item named "${trimmedName}" already exists but is currently deactivated.`,
+            });
+          } else {
+            return reply.code(409).send({
+              message: `An item named "${trimmedName}" already exists.`,
+            });
+          }
+        }
+      }
+
+      // Check barcode conflict if barcode is being changed
+      if (body.barcode && body.barcode.trim() !== existing.barcode) {
+        const barcodeConflict = await prisma.item.findFirst({
+          where: { warehouseId, barcode: body.barcode.trim(), id: { not: existing.id }, isDeleted: false },
+        });
+        if (barcodeConflict) {
+          return reply.code(409).send({
+            message: `Barcode "${body.barcode.trim()}" is already assigned to item "${barcodeConflict.name}".`,
+          });
+        }
+      }
+
+      // If purchase unit and sell unit are identical, factor is strictly 1.
+      const isSameUnit = existing.purchaseUnit.id === existing.sellUnit.id;
+      let newFactor: number | undefined = undefined;
+      if (isSameUnit) {
+        newFactor = 1;
+      } else if (body.purchaseToSellFactor != null && Number(body.purchaseToSellFactor) > 0) {
+        newFactor = Number(body.purchaseToSellFactor);
+      }
+
       try {
-        const updated = await prisma.item.update({
-          where: { id: existing.id },
-          data: {
-            name: body.name,
-            nameUrdu: body.nameUrdu,
-            sku: body.sku,
-            barcode: body.barcode,
-            categoryId: body.categoryId,
-            baseSellPrice: body.baseSellPrice,
-            marginFloorPercent: body.marginFloorPercent,
-            minStockQty: body.minStockQty,
-            maxStockQty: body.maxStockQty,
-            reorderDays: body.reorderDays,
-            isPerishable: body.isPerishable,
-            shelfLifeDays: body.shelfLifeDays,
-            returnWindowHours: body.returnWindowHours,
-            preferredSupplierId: body.preferredSupplierId,
-            sortOrder: body.sortOrder,
-            imageUrl: body.imageUrl,
-            location: body.location,
-            isActive: body.isActive,
-          },
-          select: ITEM_LIST_SELECT,
+        const updated = await prisma.$transaction(async (tx) => {
+          let newStockQty: string | Prisma.Decimal = existing.currentStockQty;
+          if (body.currentStockQty != null && Number.isFinite(Number(body.currentStockQty))) {
+            const targetStock = new Decimal(body.currentStockQty);
+            const currentStock = new Decimal(existing.currentStockQty);
+            if (!targetStock.equals(currentStock)) {
+              newStockQty = targetStock.toFixed(4);
+              const variance = targetStock.minus(currentStock);
+              await tx.stockMovement.create({
+                data: {
+                  warehouseId,
+                  itemId: existing.id,
+                  type: "ADJUSTMENT",
+                  qty: variance.toFixed(4),
+                  qtyBefore: currentStock.toFixed(4),
+                  qtyAfter: targetStock.toFixed(4),
+                  unitCost: existing.avgCostPerUnit,
+                  totalCost: variance.abs().times(existing.avgCostPerUnit).toFixed(2),
+                  avgCostBefore: existing.avgCostPerUnit,
+                  avgCostAfter: existing.avgCostPerUnit,
+                  performedById: request.user.sub,
+                  performedByName: request.user.name,
+                  reason: body.stockAdjustmentReason || "Manual stock correction from item edit",
+                },
+              });
+            }
+          }
+
+          return await tx.item.update({
+            where: { id: existing.id },
+            data: {
+              name: body.name?.trim(),
+              nameUrdu: body.nameUrdu !== undefined ? (body.nameUrdu?.trim() || null) : undefined,
+              sku: body.sku !== undefined ? (body.sku?.trim() || null) : undefined,
+              barcode: body.barcode !== undefined ? (body.barcode?.trim() || null) : undefined,
+              categoryId: body.categoryId !== undefined ? (body.categoryId || null) : undefined,
+              baseSellPrice: body.baseSellPrice,
+              marginFloorPercent: body.marginFloorPercent,
+              minStockQty: body.minStockQty,
+              maxStockQty: body.maxStockQty,
+              reorderDays: body.reorderDays,
+              isPerishable: body.isPerishable,
+              shelfLifeDays: body.shelfLifeDays,
+              returnWindowHours: body.returnWindowHours,
+              preferredSupplierId: body.preferredSupplierId !== undefined ? (body.preferredSupplierId || null) : undefined,
+              sortOrder: body.sortOrder,
+              imageUrl: body.imageUrl,
+              location: body.location,
+              isActive: body.isActive,
+              purchaseToSellFactor: newFactor,
+              currentStockQty: newStockQty,
+              avgCostPerUnit: body.avgCostPerUnit != null ? new Decimal(body.avgCostPerUnit).toFixed(4) : undefined,
+            },
+            select: ITEM_LIST_SELECT,
+          });
         });
 
         await logAudit({
@@ -308,7 +447,14 @@ export default async function itemRoutes(app: FastifyInstance) {
 
       await prisma.item.update({
         where: { id: existing.id },
-        data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+        data: {
+          isActive: false,
+          isDeleted: true,
+          deletedAt: new Date(),
+          name: `${existing.name} [deleted ${existing.id.slice(-6)}]`,
+          sku: existing.sku ? `${existing.sku}_del_${existing.id.slice(-4)}` : null,
+          barcode: null,
+        },
       });
 
       await logAudit({

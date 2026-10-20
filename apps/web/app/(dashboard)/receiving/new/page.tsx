@@ -67,7 +67,8 @@ function NewReceiptForm() {
   function lineInfo(line: ReceiptLineForm) {
     const item = items.find((i) => i.id === line.itemId);
     if (!item) return null;
-    const factor = Number(item.purchaseToSellFactor) || 1;
+    const isSameUnit = item.purchaseUnit.id === item.sellUnit.id || item.purchaseUnit.code === item.sellUnit.code;
+    const factor = isSameUnit ? 1 : (Number(item.purchaseToSellFactor) || 1);
     const qty = Number(line.qtyInPurchaseUnit) || 0;
     const cost = Number(line.unitCostPurchaseUnit) || 0;
     const qtyInSellUnit = qty * factor;

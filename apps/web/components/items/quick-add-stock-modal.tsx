@@ -28,13 +28,28 @@ export function QuickAddStockModal({
   const [error, setError] = useState<string | null>(null);
   const [flagged, setFlagged] = useState<FlaggedLine | null>(null);
 
-  const factor = Number(item.purchaseToSellFactor) || 1;
+  // If purchase unit and sell unit are identical, factor is strictly 1:1
+  const isSameUnit = item.purchaseUnit.id === item.sellUnit.id || item.purchaseUnit.code === item.sellUnit.code;
+  const factor = isSameUnit ? 1 : (Number(item.purchaseToSellFactor) || 1);
   const qtyNum = Number(qty) || 0;
   const costNum = Number(cost) || 0;
   const qtyInSellUnit = qtyNum * factor;
   const costPerSellUnit = factor > 0 ? costNum / factor : costNum;
 
+  // Detect accidental barcode scans into the quantity input
+  const isBarcodeScan =
+    (item.barcode && qty.trim() === item.barcode.trim()) ||
+    (qty.length >= 6 && !qty.includes(".") && Number(qty) > 50000);
+
   async function submit(acknowledgeVariance: boolean) {
+    if (isBarcodeScan) {
+      setError(`"${qty}" looks like a barcode, not a quantity. Please enter the actual quantity received.`);
+      return;
+    }
+    if (qtyNum <= 0) {
+      setError("Enter a quantity greater than zero.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -73,6 +88,10 @@ export function QuickAddStockModal({
       setError("Select a supplier.");
       return;
     }
+    if (isBarcodeScan) {
+      setError(`"${qty}" looks like a barcode, not a quantity. Please enter the actual quantity received.`);
+      return;
+    }
     setFlagged(null);
     submit(false);
   }
@@ -99,13 +118,30 @@ export function QuickAddStockModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-muted">Qty ({item.purchaseUnit.code})</label>
-            <Input type="number" step="any" min="0" value={qty} onChange={(e) => setQty(e.target.value)} required autoFocus />
+            <Input
+              type="number"
+              step="any"
+              min="0"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+              placeholder="e.g. 5"
+              required
+            />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-ink-muted">Cost / {item.purchaseUnit.code}</label>
             <Input type="number" step="0.01" min="0" value={cost} onChange={(e) => setCost(e.target.value)} required />
           </div>
         </div>
+        {isBarcodeScan && (
+          <div className="rounded-md bg-warning-surface p-2.5 text-xs text-warning border border-warning/30">
+            <p className="font-semibold">⚠️ Barcode detected in quantity</p>
+            <p className="mt-0.5">
+              &quot;{qty}&quot; looks like a barcode scan rather than a quantity. Please enter the actual quantity
+              received (e.g. 10 {item.purchaseUnit.code}).
+            </p>
+          </div>
+        )}
         {item.isPerishable && (
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -120,7 +156,7 @@ export function QuickAddStockModal({
             </div>
           </div>
         )}
-        {qtyInSellUnit > 0 && (
+        {qtyInSellUnit > 0 && !isBarcodeScan && (
           <p className="font-tabular rounded-md bg-surface px-3 py-2 text-sm text-ink-muted">
             = {qtyInSellUnit} {item.sellUnit.code.toLowerCase()} @ {formatMoney(costPerSellUnit)}/
             {item.sellUnit.code.toLowerCase()}
