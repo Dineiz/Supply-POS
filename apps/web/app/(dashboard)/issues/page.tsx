@@ -135,8 +135,18 @@ export default function IssuesPage() {
                           2
                         )}
                       </span>
+                      {issue.lines.some((l) => Number(l.returnedQty) > 0) && (
+                        <span className="mt-0.5 block text-xs text-warning">
+                          {issue.lines.filter((l) => Number(l.returnedQty) > 0).length} of {issue.lines.length} items returned
+                        </span>
+                      )}
                     </td>
-                    <td className="font-tabular whitespace-nowrap px-4 py-3 text-right text-ink">{formatMoney(issue.totalAmount)}</td>
+                    <td className="font-tabular whitespace-nowrap px-4 py-3 text-right text-ink">
+                      {formatMoney(issue.totalAmount)}
+                      {Number(issue.payment.returned) > 0 && (
+                        <p className="mt-0.5 text-xs text-warning">− {formatMoney(issue.payment.returned)} returned</p>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <DeliveryPaymentChip status={issue.payment.status} />
                       {(issue.payment.status === "PART_PAID" || issue.payment.status === "UNPAID") && (

@@ -6,4 +6,5 @@ export * from "./reorder.js";
 export * from "./aging.js";
 export * from "./date-range.js";
 export * from "./payment-status.js";
+export * from "./return-allocation.js";
 export { Decimal } from "decimal.js";

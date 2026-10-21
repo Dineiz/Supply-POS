@@ -12,7 +12,7 @@ import { PriceEditor } from "@/components/counter/price-editor";
 import { QtyStepper } from "@/components/counter/qty-stepper";
 import { OverrideModal } from "@/components/shared/override-modal";
 import { PaymentModal } from "@/components/counter/payment-modal";
-import { ReturnModal } from "@/components/counter/return-modal";
+import { ReturnModal, type ReturnResult } from "@/components/counter/return-modal";
 import { authFetch, ApiError } from "@/lib/api";
 import { getSessionUser, getToken, clearSession, type SessionUser } from "@/lib/session";
 import { useCounterStore } from "@/lib/store";
@@ -54,6 +54,8 @@ export default function CounterPage() {
   const [showPayment, setShowPayment] = useState(false);
   const [showReturn, setShowReturn] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  // Deliveries a just-recorded return was applied to, so their slips can be reprinted in one tap.
+  const [updatedSlips, setUpdatedSlips] = useState<ReturnResult["deliveries"]>([]);
   const [printBlocked, setPrintBlocked] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -166,6 +168,7 @@ export default function CounterPage() {
       });
 
       setLastIssue(result);
+      setUpdatedSlips([]);
 
       if (printWin && !printWin.closed) {
         printWin.location.href = `/print/issue/${result.id}`;
@@ -358,7 +361,18 @@ export default function CounterPage() {
       )}
 
       {successMessage && (
-        <p className="mt-3 rounded-md bg-success-surface px-3 py-2 text-xs text-success">{successMessage}</p>
+        <div className="mt-3 rounded-md bg-success-surface px-3 py-2 text-xs text-success">
+          <p>{successMessage}</p>
+          {updatedSlips.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => openPrintTab(d.id)}
+              className="mt-1 block font-medium underline underline-offset-2"
+            >
+              Print updated slip {d.issueNumber}
+            </button>
+          ))}
+        </div>
       )}
 
       <Button
@@ -655,6 +669,7 @@ export default function CounterPage() {
           onSuccess={async () => {
             setShowPayment(false);
             setSuccessMessage(`Payment recorded for ${customer.name}.`);
+            setUpdatedSlips([]);
             setLastIssue(null);
             await refreshCatalogue();
           }}
@@ -666,9 +681,14 @@ export default function CounterPage() {
           customer={customer}
           items={items}
           onClose={() => setShowReturn(false)}
-          onSuccess={async () => {
+          onSuccess={async ({ deliveries }) => {
             setShowReturn(false);
-            setSuccessMessage(`Return recorded for ${customer.name}.`);
+            setSuccessMessage(
+              deliveries.length > 0
+                ? `Return recorded for ${customer.name} against ${deliveries.map((d) => d.issueNumber).join(", ")}.`
+                : `Return recorded for ${customer.name}.`
+            );
+            setUpdatedSlips(deliveries);
             setLastIssue(null);
             await refreshCatalogue();
           }}

@@ -20,6 +20,11 @@ interface ReturnLineForm {
   windowHint?: string;
 }
 
+/** What the API answers once a return is recorded: which deliveries it was recorded against. */
+export interface ReturnResult {
+  deliveries: { id: string; issueNumber: string }[];
+}
+
 function emptyLine(): ReturnLineForm {
   return { itemId: "", itemName: "", qty: "", condition: "GOOD", creditUnitPrice: "" };
 }
@@ -33,7 +38,7 @@ export function ReturnModal({
   customer: Customer;
   items: Item[];
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (result: ReturnResult) => void;
 }) {
   const [recentIssues, setRecentIssues] = useState<IssueSummary[]>([]);
   const [selectedIssueId, setSelectedIssueId] = useState("");
@@ -109,7 +114,7 @@ export function ReturnModal({
     setSubmitting(true);
     setError(null);
     try {
-      await authFetch("/returns", {
+      const result = await authFetch<ReturnResult>("/returns", {
         method: "POST",
         body: JSON.stringify({
           customerId: customer.id,
@@ -124,7 +129,7 @@ export function ReturnModal({
           })),
         }),
       });
-      onSuccess();
+      onSuccess({ deliveries: result.deliveries ?? [] });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not record the return.");
     } finally {
@@ -144,13 +149,19 @@ export function ReturnModal({
             onChange={(e) => setSelectedIssueId(e.target.value)}
             className="h-11 w-full rounded-md border border-border-strong bg-paper px-3 text-sm text-ink"
           >
-            <option value="">No slip / not sure</option>
+            <option value="">No slip / not sure — match automatically</option>
             {recentIssues.map((i) => (
               <option key={i.id} value={i.id}>
                 {i.issueNumber} — {formatMoney(i.totalAmount)} ({new Date(i.issuedAt).toLocaleDateString("en-GB")})
               </option>
             ))}
           </select>
+          {!selectedIssueId && (
+            <p className="mt-1 text-xs text-ink-faint">
+              Items you add below are recorded against this customer&apos;s latest delivery that included them, so that
+              delivery and its reprinted slip show the return.
+            </p>
+          )}
         </div>
 
         <div className="space-y-3">

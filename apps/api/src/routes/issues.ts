@@ -6,6 +6,18 @@ import { aggregateIssueMoney, loadIssueMoney, paymentSummaryJson } from "../lib/
 import { parseListQuery, type ListQuerystring } from "../lib/list-query.js";
 import { getWarehouseTimezone } from "../lib/warehouse-tz.js";
 
+// A delivery's lines must come back in the order they were rung up, every time:
+// the counter, the delivery page, the print slip and the return form all list them.
+// sortOrder alone is not enough -- older deliveries all have 0 -- and with no
+// tie-break Postgres returns rows in physical order, which a return's UPDATE of
+// returnedQty shuffles, so a reprinted slip would list the items in a new order.
+// createdAt then id (a time-sortable cuid) restores rung-up order for those.
+const ISSUE_LINE_ORDER: Prisma.IssueLineOrderByWithRelationInput[] = [
+  { sortOrder: "asc" },
+  { createdAt: "asc" },
+  { id: "asc" },
+];
+
 interface IssueLineInput {
   itemId: string;
   qty: number;
@@ -58,7 +70,7 @@ export default async function issueRoutes(app: FastifyInstance) {
             customer: { select: { id: true, name: true } },
             lines: {
               select: { id: true, itemName: true, unitCode: true, qty: true, returnedQty: true },
-              orderBy: { sortOrder: "asc" },
+              orderBy: ISSUE_LINE_ORDER,
             },
           },
           orderBy: { issuedAt: "desc" },
@@ -182,7 +194,7 @@ function computeIssueLinesWithReturns(
       where: { id: request.params.id, warehouseId: request.user.warehouseId },
       include: {
         customer: { select: { id: true, name: true, nameUrdu: true, code: true, phone: true } },
-        lines: { orderBy: { sortOrder: "asc" } },
+        lines: { orderBy: ISSUE_LINE_ORDER },
         paymentAllocations: {
           orderBy: { createdAt: "asc" },
           include: {
@@ -267,7 +279,10 @@ function computeIssueLinesWithReturns(
     const issue = await prisma.issue.findFirst({
       where: { id: request.params.id, warehouseId: request.user.warehouseId },
       include: {
-        lines: { include: { item: { select: { id: true, isPerishable: true, returnWindowHours: true } } } },
+        lines: {
+          orderBy: ISSUE_LINE_ORDER,
+          include: { item: { select: { id: true, isPerishable: true, returnWindowHours: true } } },
+        },
         customer: { select: { id: true, name: true } },
         returnNotes: { include: { lines: true } },
       },
@@ -289,7 +304,7 @@ function computeIssueLinesWithReturns(
         where: { id: request.params.id, warehouseId },
         include: {
           lines: {
-            orderBy: { sortOrder: "asc" },
+            orderBy: ISSUE_LINE_ORDER,
             include: { item: { select: { id: true, isPerishable: true, location: true } } },
           },
           customer: true,
@@ -551,7 +566,7 @@ function computeIssueLinesWithReturns(
             rollingStock.set(item.id, new Decimal(item.currentStockQty));
           }
 
-          for (const line of resolvedLines) {
+          for (const [lineIndex, line] of resolvedLines.entries()) {
             const lineTotal = line.qty
               .times(line.unitPrice)
               .times(new Decimal(1).minus(new Decimal(line.discountPercent).dividedBy(100)));
@@ -572,6 +587,7 @@ function computeIssueLinesWithReturns(
                 lineTotal: lineTotal.toFixed(2),
                 unitCost: line.unitCost.toFixed(4),
                 lineCost: lineCost.toFixed(2),
+                sortOrder: lineIndex,
               },
             });
 

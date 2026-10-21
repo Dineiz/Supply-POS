@@ -368,10 +368,20 @@ Each line resolves independently: if `issueLineId` is given, it must belong
 to `originalIssueId` (or any issue for that customer, if you omit
 `originalIssueId` but still pass a specific `issueLineId`), `creditUnitPrice`
 defaults to that line's frozen `unitPrice`, and qty is capped at
-`issueLine.qty - issueLine.returnedQty` (`409` if exceeded). Without
-`issueLineId`, `creditUnitPrice` defaults to `item.baseSellPrice` and the
-cost basis is `item.avgCostPerUnit` (today's average, since there's no
-historical record to use instead).
+`issueLine.qty - issueLine.returnedQty` (`409` if exceeded).
+
+Without `issueLineId` **and** without `originalIssueId`, each line is matched
+to the customer's most recent `ISSUED` deliveries that contain that item and
+still have quantity unreturned (newest delivery first, then rung-up order),
+spreading the quantity over as many lines as it takes. The return is then
+split into one `ReturnNote` per delivery it lands on, each with
+`originalIssueId` set, so `GET /issues/:id/detail` and `/print-data` list it.
+`creditUnitPrice` defaults to the matched line's `unitPrice` and the cost
+basis is that line's frozen `unitCost`. Quantity no delivery line can absorb
+falls back to an unlinked note: `creditUnitPrice` defaults to
+`item.baseSellPrice` and the cost basis is `item.avgCostPerUnit` (today's
+average, since there's no historical record to use instead). The perishable
+window below only applies when `originalIssueId` is passed.
 
 `condition` defaults to `GOOD` but is **overridden server-side** to
 `DAMAGED` when the item `isPerishable` and more than
@@ -380,7 +390,10 @@ have passed since `originalIssue.issuedAt` — regardless of what the request
 sent. `GOOD`/`WRONG_ITEM` restore stock; `DAMAGED`/`EXPIRED` create a
 `Wastage` row (`attributedTo: CUSTOMER_RETURN`) instead.
 
-Response: `201` with the created `ReturnNote` + `lines`.
+Response: `201` with the first created `ReturnNote` + `lines`, plus
+`returnNotes: { id, returnNumber }[]` (every note created) and
+`deliveries: { id, issueNumber }[]` (the deliveries the return was recorded
+against; empty when none).
 Errors: `400` no customerId/lines, `404` unknown customer/issue/item, `409`
 over-return against a linked line.
 
