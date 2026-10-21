@@ -112,43 +112,77 @@ export function DeliveryNote({ data, printCount }: { data: PrintData; printCount
       {issue.lines.map((line) => {
         const returnedQty = Number(line.returnedQty ?? 0);
         const originalQty = Number(line.qty);
-        const netQty = Number(line.netQty ?? line.qty);
+        const netQty = Number(line.netQty ?? Math.max(originalQty - returnedQty, 0));
         const isFullyReturned = hasReturns && returnedQty > 0 && netQty <= 0;
         const isPartiallyReturned = hasReturns && returnedQty > 0 && netQty > 0;
         const lineAmt = displayAmount(line);
+        const origLineTotal = Number(line.lineTotal);
+        const returnCredit = Number(line.returnedCredit ?? Math.max(origLineTotal - lineAmt, 0));
 
+        if (isPartiallyReturned || isFullyReturned) {
+          return (
+            <div key={line.id} className="receipt-line-item">
+              <div className="receipt-item-title-row">
+                <span className={`receipt-item-name ${isFullyReturned ? "line-through opacity-70" : "bold"}`}>
+                  {line.itemName}
+                </span>
+                {line.itemNameUrdu && (
+                  <span className="receipt-item-urdu" dir="rtl">
+                    {line.itemNameUrdu}
+                  </span>
+                )}
+              </div>
+
+              {/* Original Delivered */}
+              <div className="line-cols" style={{ fontSize: "9.5px", opacity: 0.8, marginTop: "0.2mm" }}>
+                <span style={{ flex: 2, paddingLeft: "1mm" }}>• Delivered (اصل)</span>
+                <span className="col-qty">{formatQtyOnly(originalQty)} {formatUnitCode(line.unitCode)}</span>
+                <span className="col-rate">{formatMoneyPrecise(line.unitPrice)}</span>
+                <span className="col-amount">{formatMoneyPrecise(origLineTotal)}</span>
+              </div>
+
+              {/* Returned */}
+              <div className="line-cols bold" style={{ fontSize: "9.5px", marginTop: "0.2mm" }}>
+                <span style={{ flex: 2, paddingLeft: "1mm" }}>
+                  {isFullyReturned ? "• RETURNED FULL (واپسی)" : "• RETURNED (واپسی)"}
+                </span>
+                <span className="col-qty">−{formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)}</span>
+                <span className="col-rate">{formatMoneyPrecise(line.unitPrice)}</span>
+                <span className="col-amount">−{formatMoneyPrecise(returnCredit)}</span>
+              </div>
+
+              {/* Net Taken / Billed */}
+              <div className="line-cols bold" style={{ fontSize: "10.5px", marginTop: "0.3mm" }}>
+                <span style={{ flex: 2, paddingLeft: "1mm" }}>= NET BILLED (خالص وصول)</span>
+                <span className="col-qty">{formatQtyOnly(netQty)} {formatUnitCode(line.unitCode)}</span>
+                <span className="col-rate">{formatMoneyPrecise(line.unitPrice)}</span>
+                <span className="col-amount">{formatMoneyPrecise(lineAmt)}</span>
+              </div>
+            </div>
+          );
+        }
+
+        // Standard line without returns
         return (
           <div key={line.id} className="receipt-line-item">
             <div className="receipt-item-title-row">
-              <span className={`receipt-item-name ${isFullyReturned ? "line-through" : ""}`} style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
-                {line.itemName}
-              </span>
+              <span className="receipt-item-name">{line.itemName}</span>
               {line.itemNameUrdu && (
-                <span className="receipt-item-urdu" dir="rtl" style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
+                <span className="receipt-item-urdu" dir="rtl">
                   {line.itemNameUrdu}
                 </span>
               )}
             </div>
-            {isPartiallyReturned && (
-              <p style={{ fontSize: "9px", margin: "0.5mm 0" }}>
-                * Returned: {formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)} (Orig: {formatQtyOnly(originalQty)})
-              </p>
-            )}
-            {isFullyReturned && (
-              <p style={{ fontSize: "9px", margin: "0.5mm 0" }}>
-                * Returned in full ({formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)})
-              </p>
-            )}
             <div className="line-cols">
               <span style={{ flex: 2 }} />
-              <span className={`col-qty ${isFullyReturned ? "line-through" : ""}`} style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
-                {formatQtyOnly(hasReturns ? netQty : originalQty)} {formatUnitCode(line.unitCode)}
+              <span className="col-qty">
+                {formatQtyOnly(originalQty)} {formatUnitCode(line.unitCode)}
               </span>
               <span className="col-rate">
                 {formatMoneyPrecise(line.unitPrice)}
                 {warehouse.receiptShowRatePerUnit && `/${formatUnitCode(line.unitCode)}`}
               </span>
-              <span className={`col-amount ${isFullyReturned ? "line-through" : ""}`} style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
+              <span className="col-amount">
                 {formatMoneyPrecise(lineAmt)}
               </span>
             </div>

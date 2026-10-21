@@ -74,6 +74,107 @@ export default async function issueRoutes(app: FastifyInstance) {
     }
   );
 
+function computeIssueLinesWithReturns(
+  lines: Array<{
+    id: string;
+    itemId: string;
+    itemName: string;
+    itemNameUrdu?: string | null;
+    unitCode: string;
+    qty: any;
+    unitPrice: any;
+    lineTotal: any;
+    returnedQty?: any;
+    notes?: string | null;
+    item?: any;
+  }>,
+  returnNotes: Array<{
+    lines: Array<{
+      id: string;
+      itemId: string;
+      issueLineId?: string | null;
+      qty: any;
+    }>;
+  }>
+) {
+  // 1. Sum by explicit issueLineId
+  const returnsByIssueLineId = new Map<string, Decimal>();
+  // 2. Pool unlinked returns by itemId
+  const unlinkedReturnsByItemId = new Map<string, Decimal>();
+
+  for (const r of returnNotes) {
+    for (const rl of r.lines) {
+      const q = new Decimal(rl.qty);
+      if (rl.issueLineId) {
+        returnsByIssueLineId.set(
+          rl.issueLineId,
+          (returnsByIssueLineId.get(rl.issueLineId) ?? new Decimal(0)).plus(q)
+        );
+      } else {
+        unlinkedReturnsByItemId.set(
+          rl.itemId,
+          (unlinkedReturnsByItemId.get(rl.itemId) ?? new Decimal(0)).plus(q)
+        );
+      }
+    }
+  }
+
+  // Clone unlinked pool so we can consume sequentially across matching lines
+  const remainingUnlinkedByItemId = new Map<string, Decimal>();
+  for (const [k, v] of unlinkedReturnsByItemId.entries()) {
+    remainingUnlinkedByItemId.set(k, new Decimal(v));
+  }
+
+  return lines.map((l) => {
+    const originalQty = new Decimal(l.qty);
+    const dbReturnedQty = new Decimal(l.returnedQty ?? 0);
+    const directMatched = returnsByIssueLineId.get(l.id) ?? new Decimal(0);
+
+    let effectiveReturned = Decimal.max(dbReturnedQty, directMatched);
+
+    // If still have unlinked returns for this itemId, attribute to this line
+    const unlinkedAvail = remainingUnlinkedByItemId.get(l.itemId) ?? new Decimal(0);
+    if (unlinkedAvail.gt(0)) {
+      const canTake = Decimal.max(originalQty.minus(effectiveReturned), 0);
+      const toTake = Decimal.min(canTake, unlinkedAvail);
+      effectiveReturned = effectiveReturned.plus(toTake);
+      remainingUnlinkedByItemId.set(l.itemId, unlinkedAvail.minus(toTake));
+    }
+
+    const returnedQty = Decimal.min(effectiveReturned, originalQty);
+    const netQty = Decimal.max(originalQty.minus(returnedQty), 0);
+    const unitPrice = new Decimal(l.unitPrice);
+    const originalLineTotal = new Decimal(l.lineTotal);
+
+    // Effective net line total (proportionate to net qty)
+    const fullPriceTotal = originalQty.times(unitPrice);
+    const discountFraction = fullPriceTotal.gt(0)
+      ? Decimal.max(new Decimal(1).minus(originalLineTotal.dividedBy(fullPriceTotal)), 0)
+      : new Decimal(0);
+    const netLineTotal = netQty.times(unitPrice).times(new Decimal(1).minus(discountFraction)).toFixed(2);
+    const returnedCredit = returnedQty.times(unitPrice).times(new Decimal(1).minus(discountFraction)).toFixed(2);
+
+    return {
+      id: l.id,
+      itemId: l.itemId,
+      itemName: l.itemName,
+      itemNameUrdu: l.itemNameUrdu ?? null,
+      unitCode: l.unitCode,
+      qty: l.qty.toString(),
+      unitPrice: l.unitPrice.toString(),
+      lineTotal: l.lineTotal.toString(),
+      returnedQty: returnedQty.toFixed(4),
+      netQty: netQty.toFixed(4),
+      returnedCredit,
+      netLineTotal,
+      notes: l.notes ?? null,
+      isFullyReturned: returnedQty.gt(0) && netQty.lte(0),
+      isPartiallyReturned: returnedQty.gt(0) && netQty.gt(0),
+      ...(l.item ? { item: l.item, isPerishable: l.item.isPerishable, location: l.item.location } : {}),
+    };
+  });
+}
+
   // Everything an operator needs to answer "what did we send, to whom, and has
   // it been paid?" for one delivery. No cost or margin: that stays in reports.
   app.get<{ Params: { id: string } }>("/issues/:id/detail", { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -102,7 +203,7 @@ export default async function issueRoutes(app: FastifyInstance) {
         },
         returnNotes: {
           orderBy: { createdAt: "asc" },
-          include: { lines: { select: { id: true, itemName: true, unitCode: true, qty: true, creditAmount: true, condition: true } } },
+          include: { lines: true },
         },
       },
     });
@@ -112,6 +213,9 @@ export default async function issueRoutes(app: FastifyInstance) {
       .filter((a) => !a.payment.isReversed)
       .reduce((sum, a) => sum.plus(a.amountApplied), new Decimal(0));
     const returned = issue.returnNotes.reduce((sum, r) => sum.plus(r.totalCreditAmount), new Decimal(0));
+    const hasReturns = returned.gt(0);
+    const netTotal = Decimal.max(new Decimal(issue.totalAmount).minus(returned), 0);
+    const processedLines = computeIssueLinesWithReturns(issue.lines, issue.returnNotes);
 
     return {
       id: issue.id,
@@ -128,21 +232,13 @@ export default async function issueRoutes(app: FastifyInstance) {
       subtotal: issue.subtotal,
       discountAmount: issue.discountAmount,
       totalAmount: issue.totalAmount,
+      returnedAmount: returned.toFixed(2),
+      netTotal: netTotal.toFixed(2),
+      hasReturns,
       balanceBefore: issue.balanceBefore,
       balanceAfter: issue.balanceAfter,
       payment: paymentSummaryJson(issue.totalAmount, { paid, returned }),
-      lines: issue.lines.map((l) => ({
-        id: l.id,
-        itemId: l.itemId,
-        itemName: l.itemName,
-        itemNameUrdu: l.itemNameUrdu,
-        unitCode: l.unitCode,
-        qty: l.qty,
-        unitPrice: l.unitPrice,
-        lineTotal: l.lineTotal,
-        returnedQty: l.returnedQty,
-        notes: l.notes,
-      })),
+      lines: processedLines,
       payments: issue.paymentAllocations.map((a) => ({
         id: a.id,
         amountApplied: a.amountApplied,
@@ -173,10 +269,15 @@ export default async function issueRoutes(app: FastifyInstance) {
       include: {
         lines: { include: { item: { select: { id: true, isPerishable: true, returnWindowHours: true } } } },
         customer: { select: { id: true, name: true } },
+        returnNotes: { include: { lines: true } },
       },
     });
     if (!issue) return reply.code(404).send({ message: "Issue not found." });
-    return issue;
+    const processedLines = computeIssueLinesWithReturns(issue.lines, issue.returnNotes);
+    return {
+      ...issue,
+      lines: processedLines,
+    };
   });
 
   app.get<{ Params: { id: string } }>(
@@ -224,37 +325,7 @@ export default async function issueRoutes(app: FastifyInstance) {
       const hasReturns = returned.gt(0);
       const netTotal = Decimal.max(new Decimal(issue.totalAmount).minus(returned), 0);
 
-      const processedLines = issue.lines.map((l) => {
-        const originalQty = new Decimal(l.qty);
-        const returnedQty = new Decimal(l.returnedQty ?? 0);
-        const netQty = Decimal.max(originalQty.minus(returnedQty), 0);
-        const unitPrice = new Decimal(l.unitPrice);
-        const originalLineTotal = new Decimal(l.lineTotal);
-
-        // Effective net line total (proportionate to net qty)
-        const fullPriceTotal = originalQty.times(unitPrice);
-        const discountFraction = fullPriceTotal.gt(0)
-          ? Decimal.max(new Decimal(1).minus(originalLineTotal.dividedBy(fullPriceTotal)), 0)
-          : new Decimal(0);
-        const netLineTotal = netQty.times(unitPrice).times(new Decimal(1).minus(discountFraction)).toFixed(2);
-
-        return {
-          id: l.id,
-          itemId: l.itemId,
-          itemName: l.itemName,
-          itemNameUrdu: l.itemNameUrdu,
-          unitCode: l.unitCode,
-          qty: l.qty.toString(),
-          returnedQty: returnedQty.toFixed(4),
-          netQty: netQty.toFixed(4),
-          unitPrice: l.unitPrice.toString(),
-          lineTotal: l.lineTotal.toString(),
-          netLineTotal,
-          notes: l.notes,
-          isPerishable: l.item.isPerishable,
-          location: l.item.location,
-        };
-      });
+      const processedLines = computeIssueLinesWithReturns(issue.lines, issue.returnNotes);
 
       const warehouse = await prisma.warehouse.findUniqueOrThrow({ where: { id: warehouseId } });
 

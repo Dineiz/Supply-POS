@@ -206,6 +206,9 @@ export interface DeliveryDetail {
   subtotal: string;
   discountAmount: string;
   totalAmount: string;
+  returnedAmount?: string;
+  netTotal?: string;
+  hasReturns?: boolean;
   balanceBefore: string;
   balanceAfter: string;
   payment: DeliveryPayment;
@@ -219,6 +222,11 @@ export interface DeliveryDetail {
     unitPrice: string;
     lineTotal: string;
     returnedQty: string;
+    netQty?: string;
+    returnedCredit?: string;
+    netLineTotal?: string;
+    isFullyReturned?: boolean;
+    isPartiallyReturned?: boolean;
     notes: string | null;
   }[];
   payments: {
@@ -369,6 +377,9 @@ export interface PrintLine {
   unitPrice: string;
   lineTotal: string;
   netLineTotal?: string;
+  returnedCredit?: string;
+  isFullyReturned?: boolean;
+  isPartiallyReturned?: boolean;
   notes: string | null;
   isPerishable: boolean;
   location: string | null;

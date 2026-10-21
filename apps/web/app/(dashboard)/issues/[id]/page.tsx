@@ -84,36 +84,104 @@ export default function DeliveryDetailPage() {
       </Card>
 
       <Card title={`Items sent (${delivery.lines.length})`} flush>
+        {hasReturns && (
+          <div className="border-b border-warning/30 bg-warning-surface/60 px-4 py-2.5 text-xs text-warning">
+            <span className="font-semibold">Note:</span> This delivery has returned items. Returned quantities and credited amounts are reflected below.
+          </div>
+        )}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[620px] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
                 <th className="px-4 py-2.5">Item</th>
-                <th className="px-4 py-2.5 text-right">Sent</th>
+                <th className="px-4 py-2.5 text-right">Delivered</th>
+                {hasReturns && <th className="px-4 py-2.5 text-right">Returned</th>}
+                {hasReturns && <th className="px-4 py-2.5 text-right">Net Billed</th>}
                 <th className="px-4 py-2.5 text-right">Rate (PKR)</th>
-                <th className="px-4 py-2.5 text-right">Amount (PKR)</th>
-                <th className="px-4 py-2.5 text-right">Returned</th>
+                <th className="px-4 py-2.5 text-right">{hasReturns ? "Net Amount (PKR)" : "Amount (PKR)"}</th>
               </tr>
             </thead>
             <tbody>
-              {delivery.lines.map((l) => (
-                <tr key={l.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2.5 text-ink">
-                    {l.itemName}
-                    {l.notes && <p className="text-xs text-ink-faint">{l.notes}</p>}
-                  </td>
-                  <td className="font-tabular px-4 py-2.5 text-right text-ink">{formatQty(l.qty, l.unitCode)}</td>
-                  <td className="font-tabular px-4 py-2.5 text-right text-ink-muted">{formatMoneyPrecise(l.unitPrice)}</td>
-                  <td className="font-tabular px-4 py-2.5 text-right text-ink">{formatMoneyPrecise(l.lineTotal)}</td>
-                  <td className="font-tabular px-4 py-2.5 text-right">
-                    {Number(l.returnedQty) > 0 ? (
-                      <span className="text-warning">{formatQty(l.returnedQty, l.unitCode)}</span>
-                    ) : (
-                      <span className="text-ink-faint">—</span>
+              {delivery.lines.map((l) => {
+                const returnedQty = Number(l.returnedQty ?? 0);
+                const originalQty = Number(l.qty);
+                const netQty = Number(l.netQty ?? Math.max(originalQty - returnedQty, 0));
+                const isFullyReturned = returnedQty > 0 && netQty <= 0;
+                const isPartiallyReturned = returnedQty > 0 && netQty > 0;
+
+                return (
+                  <tr
+                    key={l.id}
+                    className={`border-b border-border last:border-0 ${
+                      isFullyReturned ? "bg-danger-surface/30" : isPartiallyReturned ? "bg-warning-surface/30" : ""
+                    }`}
+                  >
+                    <td className="px-4 py-2.5 text-ink">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`font-medium ${isFullyReturned ? "line-through text-ink-muted" : "text-ink"}`}>
+                          {l.itemName}
+                        </span>
+                        {l.itemNameUrdu && (
+                          <span className="text-xs text-ink-muted" dir="rtl">
+                            ({l.itemNameUrdu})
+                          </span>
+                        )}
+                        {isFullyReturned && (
+                          <span className="rounded bg-danger-surface px-1.5 py-0.5 text-[10px] font-bold text-danger">
+                            RETURNED FULL
+                          </span>
+                        )}
+                        {isPartiallyReturned && (
+                          <span className="rounded bg-warning-surface px-1.5 py-0.5 text-[10px] font-bold text-warning">
+                            PARTIAL RETURN
+                          </span>
+                        )}
+                      </div>
+                      {l.notes && <p className="text-xs text-ink-faint">{l.notes}</p>}
+                    </td>
+                    <td className={`font-tabular px-4 py-2.5 text-right ${isFullyReturned ? "text-ink-muted line-through" : "text-ink"}`}>
+                      {formatQty(l.qty, l.unitCode)}
+                    </td>
+                    {hasReturns && (
+                      <td className="font-tabular px-4 py-2.5 text-right">
+                        {returnedQty > 0 ? (
+                          <span className="font-semibold text-warning">−{formatQty(l.returnedQty, l.unitCode)}</span>
+                        ) : (
+                          <span className="text-ink-faint">—</span>
+                        )}
+                      </td>
                     )}
-                  </td>
-                </tr>
-              ))}
+                    {hasReturns && (
+                      <td className="font-tabular px-4 py-2.5 text-right">
+                        {returnedQty > 0 ? (
+                          <span className={netQty === 0 ? "text-ink-faint" : "font-bold text-ink"}>
+                            {formatQty(netQty, l.unitCode)}
+                          </span>
+                        ) : (
+                          <span className="text-ink">{formatQty(l.qty, l.unitCode)}</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="font-tabular px-4 py-2.5 text-right text-ink-muted">
+                      {formatMoneyPrecise(l.unitPrice)}
+                    </td>
+                    <td className="font-tabular px-4 py-2.5 text-right">
+                      {returnedQty > 0 ? (
+                        <div>
+                          <span className={`font-semibold ${isFullyReturned ? "text-ink-faint line-through" : "text-ink"}`}>
+                            {formatMoneyPrecise(l.netLineTotal ?? "0")}
+                          </span>
+                          <span className="ml-1.5 text-xs text-ink-faint line-through">
+                            {formatMoneyPrecise(l.lineTotal)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-ink">{formatMoneyPrecise(l.lineTotal)}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -124,7 +192,23 @@ export default function DeliveryDetailPage() {
               <MoneyRow label="Discount" value={`− ${formatMoneyExact(delivery.discountAmount)}`} />
             </>
           )}
-          <MoneyRow label="Total" value={formatMoneyExact(delivery.totalAmount)} strong />
+          {hasReturns ? (
+            <>
+              <MoneyRow label="Original Total" value={formatMoneyExact(delivery.totalAmount)} />
+              <MoneyRow
+                label="Less Returned Items"
+                value={`− ${formatMoneyExact(delivery.returnedAmount ?? payment.returned)}`}
+                note="credited to customer"
+              />
+              <MoneyRow
+                label="REVISED DELIVERY TOTAL"
+                value={formatMoneyExact(delivery.netTotal ?? Math.max(Number(delivery.totalAmount) - Number(payment.returned), 0))}
+                strong
+              />
+            </>
+          ) : (
+            <MoneyRow label="Total" value={formatMoneyExact(delivery.totalAmount)} strong />
+          )}
         </div>
       </Card>
 

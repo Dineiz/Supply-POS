@@ -69,11 +69,17 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
   css += `  html, body { margin:0!important; padding:0!important; background:transparent!important; }\n`;
   css += `  .no-print { display:none!important; }\n`;
   css += `  .receipt-preview { padding:0!important; margin:0!important; background:transparent!important; }\n`;
-  css += `  .receipt { box-shadow:none!important; border:none!important; break-inside:avoid!important; page-break-inside:avoid!important; }\n`;
+  css += `  .receipt { box-shadow:none!important; border:none!important; }\n`;
 
-  // size: <width> <height> — width first, height second.
-  // Because heightMm > widthMm, Chrome treats this as portrait.
-  css += `  @page ticket { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
+  // size: <width> <height>
+  // When heightMm <= 297mm, setting exact height gives a clean single sheet cut.
+  // When heightMm > 297mm (30+ items), forcing a huge height causes Chrome/drivers to shrink to fit!
+  // Sizing auto allows continuous thermal roll or natural multi-page flow at 100% crisp scale.
+  if (heightMm <= 297) {
+    css += `  @page ticket { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
+  } else {
+    css += `  @page ticket { size:auto; margin:0; }\n`;
+  }
 
   els.forEach((el, i) => {
     css += `  .print-ticket-${i} {\n`;
@@ -83,8 +89,7 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
       css += `    break-before: page;\n`;
       css += `    page-break-before: always;\n`;
     }
-    css += `    break-inside: avoid;\n`;
-    css += `    page-break-inside: avoid;\n`;
+    // Individual line items and sections have break-inside: avoid. Outer ticket must allow pagination.
     css += `  }\n`;
   });
 

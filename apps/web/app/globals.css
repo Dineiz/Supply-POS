@@ -533,8 +533,6 @@ body {
   .receipt {
     box-shadow: none !important;
     border: none !important;
-    page-break-inside: avoid;
-    break-inside: avoid;
   }
 
   /* print widths — these are fallbacks; JS also sets html width */
