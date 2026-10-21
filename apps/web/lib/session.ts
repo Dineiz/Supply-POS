@@ -27,4 +27,5 @@ export function getSessionUser(): SessionUser | null {
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  localStorage.removeItem("dineiz_counter_cart");
 }

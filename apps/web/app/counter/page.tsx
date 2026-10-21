@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,7 @@ export default function CounterPage() {
   const newBalance = previousBalance + total;
 
   function handleLogout() {
+    clearCart();
     clearSession();
     router.push("/");
   }
@@ -370,9 +372,9 @@ export default function CounterPage() {
         <Logo variant="wordmark" theme="light" className="h-7 w-auto" />
         <div className="flex items-center gap-3">
           {(user.role === "OWNER" || user.role === "MANAGER") && (
-            <a href="/items" className="text-sm font-medium text-ink-muted hover:text-ink">
+            <Link href="/items" className="text-sm font-medium text-ink-muted hover:text-ink">
               Manage
-            </a>
+            </Link>
           )}
           <div className="relative">
             <button

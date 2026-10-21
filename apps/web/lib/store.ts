@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { CartLine, Customer, Item } from "./types";
 
 interface CounterState {
@@ -29,68 +30,106 @@ function roundMoney(price: number): number {
   return Math.round(price * 100) / 100;
 }
 
-export const useCounterStore = create<CounterState>((set, get) => ({
-  items: [],
-  customers: [],
-  catalogueLoaded: false,
-  setCatalogue: (items, customers) => set({ items, customers, catalogueLoaded: true }),
+export const useCounterStore = create<CounterState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      customers: [],
+      catalogueLoaded: false,
+      setCatalogue: (items, customers) =>
+        set((state) => ({
+          items,
+          customers,
+          catalogueLoaded: true,
+          // Sync any updated stock or details for items already in the cart
+          lines: state.lines.map((line) => {
+            const fresh = items.find((i) => i.id === line.itemId);
+            if (!fresh) return line;
+            return {
+              ...line,
+              name: fresh.name,
+              nameUrdu: fresh.nameUrdu,
+              unitCode: fresh.unitCode,
+              stockQty: Number(fresh.stockQty),
+              avgCost: Number(fresh.avgCost),
+            };
+          }),
+        })),
 
-  customerId: null,
-  setCustomerId: (id) => set({ customerId: id }),
+      customerId: null,
+      setCustomerId: (id) => set({ customerId: id }),
 
-  lines: [],
-  addItem: (item) => {
-    const existing = get().lines.find((l) => l.itemId === item.id);
-    if (existing) {
-      get().incrementLine(item.id);
-      return;
-    }
-    const fractional = item.sellUnit.type !== "COUNT";
-    set({
-      lines: [
-        ...get().lines,
-        {
-          itemId: item.id,
-          name: item.name,
-          nameUrdu: item.nameUrdu,
-          unitCode: item.unitCode,
-          qty: 1,
-          step: fractional ? 0.5 : 1,
-          fractional,
-          unitPrice: Number(item.price),
-          avgCost: Number(item.avgCost),
-          stockQty: Number(item.stockQty),
-        },
-      ],
-    });
-  },
-  incrementLine: (itemId) =>
-    set({
-      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(l.qty + l.step) } : l)),
+      lines: [],
+      addItem: (item) => {
+        const existing = get().lines.find((l) => l.itemId === item.id);
+        if (existing) {
+          get().incrementLine(item.id);
+          return;
+        }
+        const fractional = item.sellUnit.type !== "COUNT";
+        set({
+          lines: [
+            ...get().lines,
+            {
+              itemId: item.id,
+              name: item.name,
+              nameUrdu: item.nameUrdu,
+              unitCode: item.unitCode,
+              qty: 1,
+              step: fractional ? 0.5 : 1,
+              fractional,
+              unitPrice: Number(item.price),
+              avgCost: Number(item.avgCost),
+              stockQty: Number(item.stockQty),
+            },
+          ],
+        });
+      },
+      incrementLine: (itemId) =>
+        set({
+          lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(l.qty + l.step) } : l)),
+        }),
+      decrementLine: (itemId) => {
+        const line = get().lines.find((l) => l.itemId === itemId);
+        if (!line) return;
+        const next = roundQty(line.qty - line.step);
+        if (next <= 0) {
+          get().removeLine(itemId);
+          return;
+        }
+        set({
+          lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: next } : l)),
+        });
+      },
+      setLineQty: (itemId, qty) => {
+        if (qty <= 0) {
+          get().removeLine(itemId);
+          return;
+        }
+        set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(qty) } : l)) });
+      },
+      setLineUnitPrice: (itemId, unitPrice) => {
+        if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
+        set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, unitPrice: roundMoney(unitPrice) } : l)) });
+      },
+      removeLine: (itemId) => set({ lines: get().lines.filter((l) => l.itemId !== itemId) }),
+      clearCart: () => set({ lines: [], customerId: null }),
     }),
-  decrementLine: (itemId) => {
-    const line = get().lines.find((l) => l.itemId === itemId);
-    if (!line) return;
-    const next = roundQty(line.qty - line.step);
-    if (next <= 0) {
-      get().removeLine(itemId);
-      return;
+    {
+      name: "dineiz_counter_cart",
+      storage: createJSONStorage(() =>
+        typeof window !== "undefined"
+          ? window.localStorage
+          : {
+              getItem: () => null,
+              setItem: () => {},
+              removeItem: () => {},
+            }
+      ),
+      partialize: (state) => ({
+        customerId: state.customerId,
+        lines: state.lines,
+      }),
     }
-    set({
-      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: next } : l)),
-    });
-  },
-  setLineQty: (itemId, qty) => {
-    if (qty <= 0) {
-      get().removeLine(itemId);
-      return;
-    }
-    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(qty) } : l)) });
-  },
-  setLineUnitPrice: (itemId, unitPrice) => {
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
-    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, unitPrice: roundMoney(unitPrice) } : l)) });
-  },
-  removeLine: (itemId) => set({ lines: get().lines.filter((l) => l.itemId !== itemId) }),
-  clearCart: () => set({ lines: [], customerId: null }),
-}));
+  )
+);
