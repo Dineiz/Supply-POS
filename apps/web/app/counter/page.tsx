@@ -16,7 +16,7 @@ import { ReturnModal } from "@/components/counter/return-modal";
 import { authFetch, ApiError } from "@/lib/api";
 import { getSessionUser, getToken, clearSession, type SessionUser } from "@/lib/session";
 import { useCounterStore } from "@/lib/store";
-import { formatMoney, formatUnitCode } from "@/lib/format";
+import { formatMoney, formatUnitCode, formatQtyOnly } from "@/lib/format";
 import type { Item } from "@/lib/types";
 
 interface IssueResult {
@@ -68,6 +68,7 @@ export default function CounterPage() {
     setCustomerId,
     lines,
     addItem,
+    addSeparateLine,
     incrementLine,
     decrementLine,
     setLineQty,
@@ -205,49 +206,75 @@ export default function CounterPage() {
   const cartLines = (
     <div className="flex-1 overflow-y-auto px-4 py-2">
       {lines.length === 0 && <p className="py-8 text-center text-sm text-ink-faint">No items yet</p>}
-      {lines.map((line) => (
-        <div key={line.itemId} className="border-b border-border py-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-ink">{line.name}</p>
-              {line.nameUrdu && (
-                <p className="font-urdu text-sm font-bold text-accent" dir="rtl">
-                  {line.nameUrdu}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => removeLine(line.itemId)}
-              className="p-1 text-ink-faint hover:text-danger text-sm"
-              aria-label="Remove item"
-            >
-              ✕
-            </button>
-          </div>
+      {lines.map((line) => {
+        const itemLines = lines.filter((l) => l.itemId === line.itemId);
+        const lineIndex = itemLines.findIndex((l) => l.id === line.id);
+        const hasMultiple = itemLines.length > 1;
 
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 font-tabular text-xs text-ink-muted">
-              <PriceEditor unitPrice={line.unitPrice} onSetPrice={(price) => setLineUnitPrice(line.itemId, price)} />
-              <span>/{formatUnitCode(line.unitCode)}</span>
+        return (
+          <div key={line.id} className="border-b border-border py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-ink">{line.name}</p>
+                  {hasMultiple && (
+                    <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent uppercase tracking-wider">
+                      Line {lineIndex + 1}
+                    </span>
+                  )}
+                </div>
+                {line.nameUrdu && (
+                  <p className="font-urdu text-sm font-bold text-accent" dir="rtl">
+                    {line.nameUrdu}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => removeLine(line.id)}
+                className="p-1 text-ink-faint hover:text-danger text-sm"
+                aria-label="Remove item"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="flex items-center gap-3">
-              <QtyStepper
-                qty={line.qty}
-                unitCode={line.unitCode}
-                fractional={line.fractional}
-                size="compact"
-                onIncrement={() => incrementLine(line.itemId)}
-                onDecrement={() => decrementLine(line.itemId)}
-                onSetQty={(qty) => setLineQty(line.itemId, qty)}
-              />
-              <span className="font-tabular text-sm font-semibold text-ink min-w-[4rem] text-right">
-                {formatMoney(line.qty * line.unitPrice)}
-              </span>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-tabular text-xs text-ink-muted">
+                <PriceEditor unitPrice={line.unitPrice} onSetPrice={(price) => setLineUnitPrice(line.id, price)} />
+                <span>/{formatUnitCode(line.unitCode)}</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <QtyStepper
+                  qty={line.qty}
+                  unitCode={line.unitCode}
+                  fractional={line.fractional}
+                  size="compact"
+                  onIncrement={() => incrementLine(line.id)}
+                  onDecrement={() => decrementLine(line.id)}
+                  onSetQty={(qty) => setLineQty(line.id, qty)}
+                />
+                <span className="font-tabular text-sm font-semibold text-ink min-w-[4rem] text-right">
+                  {formatMoney(line.qty * line.unitPrice)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-1 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  const item = items.find((i) => i.id === line.itemId);
+                  if (item) addSeparateLine(item, line.qty);
+                }}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-accent hover:text-accent-hover hover:underline"
+              >
+                <span className="text-xs font-bold">+</span> Separate line
+              </button>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -470,8 +497,11 @@ export default function CounterPage() {
               const minStock = item.minStockQty ? Number(item.minStockQty) : null;
               const isOut = stock <= 0;
               const isLow = !isOut && minStock !== null && stock <= minStock;
-              const cartLine = lines.find((l) => l.itemId === item.id);
-              const inCart = !!cartLine;
+              const itemLines = lines.filter((l) => l.itemId === item.id);
+              const inCart = itemLines.length > 0;
+              const totalCartQty = itemLines.reduce((sum, l) => sum + l.qty, 0);
+              const singleLine = itemLines.length === 1 ? itemLines[0] : null;
+              const lastLine = itemLines[itemLines.length - 1];
 
               return (
                 <div
@@ -514,16 +544,51 @@ export default function CounterPage() {
                   >
                     {isOut ? "Out of stock" : `${isLow ? "⚠ " : ""}${stock} ${formatUnitCode(item.unitCode)}`}
                   </p>
-                  {cartLine && (
-                    <div className="mt-3">
-                      <QtyStepper
-                        qty={cartLine.qty}
-                        unitCode={cartLine.unitCode}
-                        fractional={cartLine.fractional}
-                        onIncrement={() => incrementLine(item.id)}
-                        onDecrement={() => decrementLine(item.id)}
-                        onSetQty={(qty) => setLineQty(item.id, qty)}
-                      />
+                  {inCart && (
+                    <div className="mt-3 w-full" onClick={(e) => e.stopPropagation()}>
+                      {singleLine ? (
+                        <div className="flex flex-col gap-1.5">
+                          <QtyStepper
+                            qty={singleLine.qty}
+                            unitCode={singleLine.unitCode}
+                            fractional={singleLine.fractional}
+                            onIncrement={() => incrementLine(singleLine.id)}
+                            onDecrement={() => decrementLine(singleLine.id)}
+                            onSetQty={(qty) => setLineQty(singleLine.id, qty)}
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addSeparateLine(item, singleLine.qty);
+                            }}
+                            className="flex w-full items-center justify-center gap-1 rounded border border-accent/40 bg-paper py-1 text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
+                          >
+                            <span>+</span> Separate line
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-1.5 rounded-md bg-accent/10 p-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-accent">
+                              {formatQtyOnly(totalCartQty)} {formatUnitCode(item.unitCode)}
+                            </span>
+                            <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                              {itemLines.length} lines
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addSeparateLine(item, lastLine?.qty ?? 1);
+                            }}
+                            className="mt-1 flex w-full items-center justify-center gap-1 rounded border border-accent/40 bg-paper py-1 text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
+                          >
+                            <span>+</span> Add another line
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

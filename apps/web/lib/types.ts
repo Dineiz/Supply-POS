@@ -882,6 +882,7 @@ export interface SupplierStatement {
 }
 
 export interface CartLine {
+  id: string;
   itemId: string;
   name: string;
   nameUrdu?: string | null;

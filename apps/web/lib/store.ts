@@ -13,12 +13,20 @@ interface CounterState {
 
   lines: CartLine[];
   addItem: (item: Item) => void;
-  incrementLine: (itemId: string) => void;
-  decrementLine: (itemId: string) => void;
-  setLineQty: (itemId: string, qty: number) => void;
-  setLineUnitPrice: (itemId: string, unitPrice: number) => void;
-  removeLine: (itemId: string) => void;
+  addSeparateLine: (item: Item, initialQty?: number) => void;
+  incrementLine: (lineId: string) => void;
+  decrementLine: (lineId: string) => void;
+  setLineQty: (lineId: string, qty: number) => void;
+  setLineUnitPrice: (lineId: string, unitPrice: number) => void;
+  removeLine: (lineId: string) => void;
   clearCart: () => void;
+}
+
+function generateLineId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `line_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /** Avoids floating-point drift (0.1 + 0.2 = 0.30000000000000004) while preserving up to 4 decimal places (e.g. 2.375 kg). */
@@ -44,9 +52,10 @@ export const useCounterStore = create<CounterState>()(
           // Sync any updated stock or details for items already in the cart
           lines: state.lines.map((line) => {
             const fresh = items.find((i) => i.id === line.itemId);
-            if (!fresh) return line;
+            if (!fresh) return { ...line, id: line.id || generateLineId() };
             return {
               ...line,
+              id: line.id || generateLineId(),
               name: fresh.name,
               nameUrdu: fresh.nameUrdu,
               unitCode: fresh.unitCode,
@@ -61,58 +70,67 @@ export const useCounterStore = create<CounterState>()(
 
       lines: [],
       addItem: (item) => {
-        const existing = get().lines.find((l) => l.itemId === item.id);
-        if (existing) {
-          get().incrementLine(item.id);
+        const matching = get().lines.filter((l) => l.itemId === item.id);
+        if (matching.length > 0) {
+          const target = matching[matching.length - 1]!;
+          get().incrementLine(target.id);
           return;
         }
+        get().addSeparateLine(item, 1);
+      },
+      addSeparateLine: (item, initialQty) => {
         const fractional = item.sellUnit.type !== "COUNT";
+        const existing = get().lines.filter((l) => l.itemId === item.id);
+        const lastLine = existing[existing.length - 1];
+        const qty = initialQty ?? (lastLine ? lastLine.qty : 1);
+        const unitPrice = lastLine ? lastLine.unitPrice : Number(item.price);
         set({
           lines: [
             ...get().lines,
             {
+              id: generateLineId(),
               itemId: item.id,
               name: item.name,
               nameUrdu: item.nameUrdu,
               unitCode: item.unitCode,
-              qty: 1,
+              qty: roundQty(qty > 0 ? qty : 1),
               step: fractional ? 0.5 : 1,
               fractional,
-              unitPrice: Number(item.price),
+              unitPrice: roundMoney(unitPrice),
               avgCost: Number(item.avgCost),
               stockQty: Number(item.stockQty),
             },
           ],
         });
       },
-      incrementLine: (itemId) =>
+      incrementLine: (lineId) =>
         set({
-          lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(l.qty + l.step) } : l)),
+          lines: get().lines.map((l) => (l.id === lineId ? { ...l, qty: roundQty(l.qty + l.step) } : l)),
         }),
-      decrementLine: (itemId) => {
-        const line = get().lines.find((l) => l.itemId === itemId);
+      decrementLine: (lineId) => {
+        const line = get().lines.find((l) => l.id === lineId);
         if (!line) return;
         const next = roundQty(line.qty - line.step);
         if (next <= 0) {
-          get().removeLine(itemId);
+          get().removeLine(lineId);
           return;
         }
         set({
-          lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: next } : l)),
+          lines: get().lines.map((l) => (l.id === lineId ? { ...l, qty: next } : l)),
         });
       },
-      setLineQty: (itemId, qty) => {
+      setLineQty: (lineId, qty) => {
         if (qty <= 0) {
-          get().removeLine(itemId);
+          get().removeLine(lineId);
           return;
         }
-        set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(qty) } : l)) });
+        set({ lines: get().lines.map((l) => (l.id === lineId ? { ...l, qty: roundQty(qty) } : l)) });
       },
-      setLineUnitPrice: (itemId, unitPrice) => {
+      setLineUnitPrice: (lineId, unitPrice) => {
         if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
-        set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, unitPrice: roundMoney(unitPrice) } : l)) });
+        set({ lines: get().lines.map((l) => (l.id === lineId ? { ...l, unitPrice: roundMoney(unitPrice) } : l)) });
       },
-      removeLine: (itemId) => set({ lines: get().lines.filter((l) => l.itemId !== itemId) }),
+      removeLine: (lineId) => set({ lines: get().lines.filter((l) => l.id !== lineId) }),
       clearCart: () => set({ lines: [], customerId: null }),
     }),
     {
@@ -126,9 +144,20 @@ export const useCounterStore = create<CounterState>()(
               removeItem: () => {},
             }
       ),
+      onRehydrateStorage: () => (state) => {
+        if (state?.lines) {
+          state.lines = state.lines.map((l) => ({
+            ...l,
+            id: l.id || generateLineId(),
+          }));
+        }
+      },
       partialize: (state) => ({
         customerId: state.customerId,
-        lines: state.lines,
+        lines: state.lines.map((l) => ({
+          ...l,
+          id: l.id || generateLineId(),
+        })),
       }),
     }
   )

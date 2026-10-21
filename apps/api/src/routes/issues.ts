@@ -412,17 +412,37 @@ export default async function issueRoutes(app: FastifyInstance) {
         customer.discountPercent.toString()
       );
 
-      const shortItems = resolvedLines.filter((l) => new Decimal(l.item.currentStockQty).lt(l.qty));
+      // Aggregate requested quantity per item to validate total requested stock
+      const requestedByItem = new Map<string, Decimal>();
+      for (const line of resolvedLines) {
+        const cur = requestedByItem.get(line.item.id) ?? new Decimal(0);
+        requestedByItem.set(line.item.id, cur.plus(line.qty));
+      }
+
+      const shortItems = Array.from(requestedByItem.entries())
+        .filter(([itemId, totalRequested]) => {
+          const item = itemsById.get(itemId)!;
+          return new Decimal(item.currentStockQty).lt(totalRequested);
+        })
+        .map(([itemId, totalRequested]) => {
+          const item = itemsById.get(itemId)!;
+          return {
+            itemId,
+            name: item.name,
+            available: item.currentStockQty.toString(),
+            requested: formatQty(totalRequested),
+          };
+        });
       const balanceAfterIssue = new Decimal(customer.currentBalance).plus(totals.totalAmount);
 
       if (shortItems.length > 0 && !body.override) {
         return reply.code(409).send({
           message: "Not enough stock for one or more items.",
           shortItems: shortItems.map((l) => ({
-            itemId: l.item.id,
-            name: l.item.name,
-            available: l.item.currentStockQty,
-            requested: formatQty(l.qty),
+            itemId: l.itemId,
+            name: l.name,
+            available: l.available,
+            requested: l.requested,
           })),
         });
       }
@@ -455,13 +475,19 @@ export default async function issueRoutes(app: FastifyInstance) {
             },
           });
 
+          const rollingStock = new Map<string, Decimal>();
+          for (const item of items) {
+            rollingStock.set(item.id, new Decimal(item.currentStockQty));
+          }
+
           for (const line of resolvedLines) {
             const lineTotal = line.qty
               .times(line.unitPrice)
               .times(new Decimal(1).minus(new Decimal(line.discountPercent).dividedBy(100)));
             const lineCost = line.qty.times(line.unitCost);
-            const qtyBefore = new Decimal(line.item.currentStockQty);
+            const qtyBefore = rollingStock.get(line.item.id)!;
             const qtyAfter = qtyBefore.minus(line.qty);
+            rollingStock.set(line.item.id, qtyAfter);
 
             await tx.issueLine.create({
               data: {
