@@ -192,9 +192,69 @@ export default async function issueRoutes(app: FastifyInstance) {
             include: { item: { select: { id: true, isPerishable: true, location: true } } },
           },
           customer: true,
+          paymentAllocations: {
+            where: { payment: { isReversed: false } },
+            include: {
+              payment: {
+                select: {
+                  id: true,
+                  paymentNumber: true,
+                  paymentDate: true,
+                  method: true,
+                  reference: true,
+                  amount: true,
+                  isReversed: true,
+                },
+              },
+            },
+          },
+          returnNotes: {
+            orderBy: { createdAt: "asc" },
+            include: { lines: true },
+          },
         },
       });
       if (!issue) return reply.code(404).send({ message: "Issue not found." });
+
+      const paid = issue.paymentAllocations
+        .filter((a) => !a.payment.isReversed)
+        .reduce((sum, a) => sum.plus(a.amountApplied), new Decimal(0));
+      const returned = issue.returnNotes.reduce((sum, r) => sum.plus(r.totalCreditAmount), new Decimal(0));
+      const payment = paymentSummaryJson(issue.totalAmount, { paid, returned });
+      const hasReturns = returned.gt(0);
+      const netTotal = Decimal.max(new Decimal(issue.totalAmount).minus(returned), 0);
+
+      const processedLines = issue.lines.map((l) => {
+        const originalQty = new Decimal(l.qty);
+        const returnedQty = new Decimal(l.returnedQty ?? 0);
+        const netQty = Decimal.max(originalQty.minus(returnedQty), 0);
+        const unitPrice = new Decimal(l.unitPrice);
+        const originalLineTotal = new Decimal(l.lineTotal);
+
+        // Effective net line total (proportionate to net qty)
+        const fullPriceTotal = originalQty.times(unitPrice);
+        const discountFraction = fullPriceTotal.gt(0)
+          ? Decimal.max(new Decimal(1).minus(originalLineTotal.dividedBy(fullPriceTotal)), 0)
+          : new Decimal(0);
+        const netLineTotal = netQty.times(unitPrice).times(new Decimal(1).minus(discountFraction)).toFixed(2);
+
+        return {
+          id: l.id,
+          itemId: l.itemId,
+          itemName: l.itemName,
+          itemNameUrdu: l.itemNameUrdu,
+          unitCode: l.unitCode,
+          qty: l.qty.toString(),
+          returnedQty: returnedQty.toFixed(4),
+          netQty: netQty.toFixed(4),
+          unitPrice: l.unitPrice.toString(),
+          lineTotal: l.lineTotal.toString(),
+          netLineTotal,
+          notes: l.notes,
+          isPerishable: l.item.isPerishable,
+          location: l.item.location,
+        };
+      });
 
       const warehouse = await prisma.warehouse.findUniqueOrThrow({ where: { id: warehouseId } });
 
@@ -223,7 +283,12 @@ export default async function issueRoutes(app: FastifyInstance) {
           subtotal: issue.subtotal,
           discountAmount: issue.discountAmount,
           totalAmount: issue.totalAmount,
-          paidAmount: issue.paidAmount,
+          returnedAmount: returned.toFixed(2),
+          netTotal: netTotal.toFixed(2),
+          paidAmount: paid.toFixed(2),
+          dueAmount: payment.due,
+          hasReturns,
+          paymentStatus: payment.status,
           paymentMethod: issue.paymentMethod,
           balanceBefore: issue.balanceBefore,
           balanceAfter: issue.balanceAfter,
@@ -231,18 +296,12 @@ export default async function issueRoutes(app: FastifyInstance) {
           issuedByName: issue.issuedByName,
           receivedByName: issue.receivedByName,
           notes: issue.notes,
-          lines: issue.lines.map((l) => ({
-            id: l.id,
-            itemId: l.itemId,
-            itemName: l.itemName,
-            itemNameUrdu: l.itemNameUrdu,
-            unitCode: l.unitCode,
-            qty: l.qty,
-            unitPrice: l.unitPrice,
-            lineTotal: l.lineTotal,
-            notes: l.notes,
-            isPerishable: l.item.isPerishable,
-            location: l.item.location,
+          lines: processedLines,
+          returns: issue.returnNotes.map((r) => ({
+            id: r.id,
+            returnNumber: r.returnNumber,
+            createdAt: r.createdAt.toISOString(),
+            totalCreditAmount: r.totalCreditAmount.toString(),
           })),
         },
         customer: {

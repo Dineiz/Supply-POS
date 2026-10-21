@@ -13,7 +13,15 @@ export function PickingSlip({
   const { issue, customer, warehouse, perishableGuidance } = data;
   const displayLines = lines ?? issue.lines;
   const paperClass = warehouse.receiptPaperWidth === "58mm" ? "paper-58mm" : "paper-80mm";
-  const totalUnits = displayLines.reduce((sum, l) => sum + Number(l.qty), 0);
+  const hasReturns = Boolean(
+    issue.hasReturns ||
+    Number(issue.returnedAmount ?? 0) > 0 ||
+    issue.lines.some((l) => Number(l.returnedQty ?? 0) > 0)
+  );
+  const totalUnits = displayLines.reduce(
+    (sum, l) => sum + Number(hasReturns ? (l.netQty ?? l.qty) : l.qty),
+    0
+  );
 
   return (
     <div className={`receipt kot-receipt ${paperClass}`}>
@@ -21,7 +29,7 @@ export function PickingSlip({
       <div className="receipt-header">
         <p className="kot-store-name">{warehouse.name.toUpperCase()}</p>
         <div className="kot-title-badge">
-          <span>WAREHOUSE ORDER / KOT</span>
+          <span>{hasReturns ? "WAREHOUSE ORDER / KOT (UPDATED)" : "WAREHOUSE ORDER / KOT"}</span>
         </div>
         <p className="kot-doc-number">ORDER #{issue.issueNumber}</p>
         {ticketLabel && <p className="kot-ticket-badge">{ticketLabel}</p>}
@@ -76,15 +84,25 @@ export function PickingSlip({
       {/* ── Items Checklist ── */}
       {displayLines.map((line) => {
         const guidance = perishableGuidance?.[line.itemId];
+        const returnedQty = Number(line.returnedQty ?? 0);
+        const originalQty = Number(line.qty);
+        const netQty = Number(line.netQty ?? line.qty);
+        const isFullyReturned = hasReturns && returnedQty > 0 && netQty <= 0;
+        const displayQty = hasReturns ? netQty : originalQty;
+
         return (
           <div key={line.id} className="kot-item-block">
             <div className="line-cols" style={{ alignItems: "flex-start" }}>
               <span className="kot-check-box">[&nbsp;&nbsp;]</span>
               <div style={{ flex: 1, paddingLeft: "1.5mm", paddingRight: "1.5mm" }}>
                 <div className="flex items-baseline justify-between gap-1">
-                  <span className="kot-item-name bold">{line.itemName.toUpperCase()}</span>
+                  <span className={`kot-item-name bold ${isFullyReturned ? "line-through opacity-70" : ""}`}>
+                    {line.itemName.toUpperCase()}
+                  </span>
                   {line.itemNameUrdu && (
-                    <span className="kot-item-urdu" dir="rtl">{line.itemNameUrdu}</span>
+                    <span className="kot-item-urdu" dir="rtl" style={{ opacity: isFullyReturned ? 0.7 : 1 }}>
+                      {line.itemNameUrdu}
+                    </span>
                   )}
                 </div>
                 <div className="kot-tag-row">
@@ -101,9 +119,14 @@ export function PickingSlip({
                   </p>
                 )}
                 {line.notes && <p className="kot-line-notes">* {line.notes}</p>}
+                {returnedQty > 0 && (
+                  <p style={{ fontSize: "9.5px", color: "#666", margin: "0.5mm 0" }}>
+                    * Returned: {formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)}
+                  </p>
+                )}
               </div>
-              <span className="bold kot-item-qty">
-                {formatQtyOnly(line.qty)} {formatUnitCode(line.unitCode)}
+              <span className={`bold kot-item-qty ${isFullyReturned ? "line-through opacity-70" : ""}`}>
+                {formatQtyOnly(displayQty)} {formatUnitCode(line.unitCode)}
               </span>
             </div>
             <hr className="rule-dotted" />

@@ -12,15 +12,36 @@ const METHOD_LABEL: Record<string, string> = {
 
 export function DeliveryNote({ data, printCount }: { data: PrintData; printCount: number }) {
   const { issue, customer, warehouse, oldestUnpaid } = data;
-  const totalQty = issue.lines.reduce((sum, l) => sum + Number(l.qty), 0);
+  const hasReturns = Boolean(
+    issue.hasReturns ||
+    Number(issue.returnedAmount ?? 0) > 0 ||
+    issue.lines.some((l) => Number(l.returnedQty ?? 0) > 0)
+  );
+
+  const displayQty = (line: (typeof issue.lines)[number]) =>
+    hasReturns ? Number(line.netQty ?? line.qty) : Number(line.qty);
+
+  const displayAmount = (line: (typeof issue.lines)[number]) =>
+    hasReturns ? Number(line.netLineTotal ?? line.lineTotal) : Number(line.lineTotal);
+
+  const totalQty = issue.lines.reduce((sum, l) => sum + displayQty(l), 0);
+  const activeItemsCount = issue.lines.filter((l) => displayQty(l) > 0).length;
   const paperClass = warehouse.receiptPaperWidth === "58mm" ? "paper-58mm" : "paper-80mm";
 
   return (
     <div className={`receipt ${paperClass}`}>
 
-      {/* ── Reprint banner ── */}
-      {printCount > 1 && (
-        <p className="receipt-reprint-banner">*** REPRINT — COPY {printCount} ***</p>
+      {/* ── Reprint banner / Updated for returns banner ── */}
+      {hasReturns ? (
+        <p className="receipt-reprint-banner" style={{ border: "1px dashed #000" }}>
+          {printCount > 1
+            ? `*** REPRINT — UPDATED BILL (AFTER RETURNS) ***`
+            : `*** UPDATED BILL — ADJUSTED FOR RETURNS ***`}
+        </p>
+      ) : (
+        printCount > 1 && (
+          <p className="receipt-reprint-banner">*** REPRINT — COPY {printCount} ***</p>
+        )
       )}
 
       {/* ── Store header ── */}
@@ -43,8 +64,13 @@ export function DeliveryNote({ data, printCount }: { data: PrintData; printCount
 
       {/* ── Document type + number ── */}
       <div className="receipt-doc-block">
-        <p className="receipt-doc-title">DELIVERY NOTE</p>
+        <p className="receipt-doc-title">{hasReturns ? "DELIVERY NOTE (UPDATED)" : "DELIVERY NOTE"}</p>
         <p className="receipt-doc-number">{issue.issueNumber}</p>
+        {hasReturns && issue.returns && issue.returns.length > 0 && (
+          <p style={{ fontSize: "10px", marginTop: "0.5mm" }}>
+            Return Ref: {issue.returns.map((r) => r.returnNumber).join(", ")}
+          </p>
+        )}
       </div>
 
       {/* ── Date / time stamp — always bold, always visible ── */}
@@ -83,60 +109,102 @@ export function DeliveryNote({ data, printCount }: { data: PrintData; printCount
       <hr className="rule-light" />
 
       {/* ── Line items ── */}
-      {issue.lines.map((line) => (
-        <div key={line.id} className="receipt-line-item">
-          <div className="receipt-item-title-row">
-            <span className="receipt-item-name">{line.itemName}</span>
-            {line.itemNameUrdu && (
-              <span className="receipt-item-urdu" dir="rtl">
-                {line.itemNameUrdu}
+      {issue.lines.map((line) => {
+        const returnedQty = Number(line.returnedQty ?? 0);
+        const originalQty = Number(line.qty);
+        const netQty = Number(line.netQty ?? line.qty);
+        const isFullyReturned = hasReturns && returnedQty > 0 && netQty <= 0;
+        const isPartiallyReturned = hasReturns && returnedQty > 0 && netQty > 0;
+        const lineAmt = displayAmount(line);
+
+        return (
+          <div key={line.id} className="receipt-line-item">
+            <div className="receipt-item-title-row">
+              <span className={`receipt-item-name ${isFullyReturned ? "line-through" : ""}`} style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
+                {line.itemName}
               </span>
+              {line.itemNameUrdu && (
+                <span className="receipt-item-urdu" dir="rtl" style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
+                  {line.itemNameUrdu}
+                </span>
+              )}
+            </div>
+            {isPartiallyReturned && (
+              <p style={{ fontSize: "9px", margin: "0.5mm 0" }}>
+                * Returned: {formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)} (Orig: {formatQtyOnly(originalQty)})
+              </p>
             )}
+            {isFullyReturned && (
+              <p style={{ fontSize: "9px", margin: "0.5mm 0" }}>
+                * Returned in full ({formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)})
+              </p>
+            )}
+            <div className="line-cols">
+              <span style={{ flex: 2 }} />
+              <span className={`col-qty ${isFullyReturned ? "line-through" : ""}`} style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
+                {formatQtyOnly(hasReturns ? netQty : originalQty)} {formatUnitCode(line.unitCode)}
+              </span>
+              <span className="col-rate">
+                {formatMoneyPrecise(line.unitPrice)}
+                {warehouse.receiptShowRatePerUnit && `/${formatUnitCode(line.unitCode)}`}
+              </span>
+              <span className={`col-amount ${isFullyReturned ? "line-through" : ""}`} style={{ opacity: isFullyReturned ? 0.6 : 1 }}>
+                {formatMoneyPrecise(lineAmt)}
+              </span>
+            </div>
           </div>
-          <div className="line-cols">
-            <span style={{ flex: 2 }} />
-            <span className="col-qty">
-              {formatQtyOnly(line.qty)} {formatUnitCode(line.unitCode)}
-            </span>
-            <span className="col-rate">
-              {formatMoneyPrecise(line.unitPrice)}
-              {warehouse.receiptShowRatePerUnit && `/${formatUnitCode(line.unitCode)}`}
-            </span>
-            <span className="col-amount">{formatMoneyPrecise(line.lineTotal)}</span>
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       <hr className="rule-light" />
 
       {/* ── Totals ── */}
       <div className="receipt-section">
-        <KvRow label={`Items: ${issue.lines.length}`} value={`Qty: ${formatQtyOnly(totalQty)}`} />
+        <KvRow
+          label={`Items: ${hasReturns ? activeItemsCount : issue.lines.length}`}
+          value={`${hasReturns ? "Net Qty" : "Qty"}: ${formatQtyOnly(totalQty)}`}
+        />
       </div>
-      <div className="receipt-section" style={{ marginTop: "1mm" }}>
-        <KvRow label="Subtotal" value={formatMoneyPrecise(issue.subtotal)} />
-        {Number(issue.discountAmount) > 0 && (
-          <KvRow label="Discount" value={`- ${formatMoneyPrecise(issue.discountAmount)}`} />
-        )}
-      </div>
-      <hr className="rule-light" />
-      <KvRow label="TOTAL" value={formatMoneyPrecise(issue.totalAmount)} bold />
+      {hasReturns ? (
+        <div className="receipt-section" style={{ marginTop: "1mm" }}>
+          <KvRow label="Original Total" value={formatMoneyPrecise(issue.totalAmount)} />
+          <KvRow label="Less Returns (Credited)" value={`- ${formatMoneyPrecise(issue.returnedAmount ?? 0)}`} />
+          <hr className="rule-light" />
+          <KvRow label="REVISED TOTAL" value={formatMoneyPrecise(issue.netTotal ?? issue.totalAmount)} bold />
+        </div>
+      ) : (
+        <div className="receipt-section" style={{ marginTop: "1mm" }}>
+          <KvRow label="Subtotal" value={formatMoneyPrecise(issue.subtotal)} />
+          {Number(issue.discountAmount) > 0 && (
+            <KvRow label="Discount" value={`- ${formatMoneyPrecise(issue.discountAmount)}`} />
+          )}
+          <hr className="rule-light" />
+          <KvRow label="TOTAL" value={formatMoneyPrecise(issue.totalAmount)} bold />
+        </div>
+      )}
       <hr className="rule-heavy" />
 
       {/* ── Account summary ── */}
       <p className="receipt-section-label">ACCOUNT SUMMARY</p>
       <div className="receipt-section">
         <KvRow label="Previous Balance" value={formatMoneyPrecise(issue.balanceBefore)} />
-        <KvRow label="This Delivery" value={`+ ${formatMoneyPrecise(issue.totalAmount)}`} />
+        <KvRow
+          label={hasReturns ? "This Delivery (Net)" : "This Delivery"}
+          value={`+ ${formatMoneyPrecise(hasReturns ? (issue.netTotal ?? issue.totalAmount) : issue.totalAmount)}`}
+        />
         {Number(issue.paidAmount) > 0 && (
           <KvRow
-            label={`Paid Now (${METHOD_LABEL[issue.paymentMethod ?? "CASH"]})`}
+            label={`Paid (${METHOD_LABEL[issue.paymentMethod ?? "CASH"]})`}
             value={`- ${formatMoneyPrecise(issue.paidAmount)}`}
           />
         )}
       </div>
       <hr className="rule-light" />
-      <KvRow label="BALANCE DUE" value={formatMoneyPrecise(issue.balanceAfter)} bold />
+      <KvRow
+        label="STILL TO PAY"
+        value={formatMoneyPrecise(hasReturns ? (issue.dueAmount ?? issue.balanceAfter) : (issue.dueAmount ?? issue.balanceAfter))}
+        bold
+      />
       <hr className="rule-heavy" />
 
       {/* ── Oldest unpaid note ── */}

@@ -364,8 +364,11 @@ export interface PrintLine {
   itemNameUrdu: string | null;
   unitCode: string;
   qty: string;
+  returnedQty?: string;
+  netQty?: string;
   unitPrice: string;
   lineTotal: string;
+  netLineTotal?: string;
   notes: string | null;
   isPerishable: boolean;
   location: string | null;
@@ -379,7 +382,12 @@ export interface PrintData {
     subtotal: string;
     discountAmount: string;
     totalAmount: string;
+    returnedAmount?: string;
+    netTotal?: string;
     paidAmount: string;
+    dueAmount?: string;
+    hasReturns?: boolean;
+    paymentStatus?: DeliveryPaymentStatus;
     paymentMethod: PaymentMethod | null;
     balanceBefore: string;
     balanceAfter: string;
@@ -388,6 +396,12 @@ export interface PrintData {
     receivedByName: string | null;
     notes: string | null;
     lines: PrintLine[];
+    returns?: {
+      id: string;
+      returnNumber: string;
+      createdAt: string;
+      totalCreditAmount: string;
+    }[];
   };
   customer: {
     id: string;
