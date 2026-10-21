@@ -546,49 +546,47 @@ export default function CounterPage() {
                   </p>
                   {inCart && (
                     <div className="mt-3 w-full" onClick={(e) => e.stopPropagation()}>
-                      {singleLine ? (
-                        <div className="flex flex-col gap-1.5">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
                           <QtyStepper
-                            qty={singleLine.qty}
-                            unitCode={singleLine.unitCode}
-                            fractional={singleLine.fractional}
-                            onIncrement={() => incrementLine(singleLine.id)}
-                            onDecrement={() => decrementLine(singleLine.id)}
-                            onSetQty={(qty) => setLineQty(singleLine.id, qty)}
+                            qty={singleLine ? singleLine.qty : totalCartQty}
+                            unitCode={item.unitCode}
+                            fractional={item.sellUnit.type !== "COUNT"}
+                            onIncrement={() => incrementLine(lastLine?.id ?? singleLine!.id)}
+                            onDecrement={() => decrementLine(lastLine?.id ?? singleLine!.id)}
+                            onSetQty={(qty) => setLineQty(lastLine?.id ?? singleLine!.id, qty)}
                           />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              addSeparateLine(item, singleLine.qty);
-                            }}
-                            className="flex w-full items-center justify-center gap-1 rounded border border-accent/40 bg-paper py-1 text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
-                          >
-                            <span>+</span> Separate line
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-1.5 rounded-md bg-accent/10 p-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-accent">
-                              {formatQtyOnly(totalCartQty)} {formatUnitCode(item.unitCode)}
-                            </span>
+                          {itemLines.length > 1 && (
                             <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent">
                               {itemLines.length} lines
                             </span>
-                          </div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 pt-1">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              addSeparateLine(item, lastLine?.qty ?? 1);
+                              incrementLine(lastLine?.id ?? singleLine!.id);
                             }}
-                            className="mt-1 flex w-full items-center justify-center gap-1 rounded border border-accent/40 bg-paper py-1 text-xs font-semibold text-accent hover:bg-accent/10 transition-colors"
+                            className="flex items-center justify-center gap-1 rounded border border-border bg-paper py-1.5 text-xs font-semibold text-ink hover:bg-surface active:bg-surface-hover transition-colors shadow-sm"
+                            title="Add more to existing line"
                           >
-                            <span>+</span> Add another line
+                            <span>+</span> Add More
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addSeparateLine(item, lastLine?.qty ?? singleLine?.qty ?? 1);
+                            }}
+                            className="flex items-center justify-center gap-1 rounded border border-accent bg-accent/10 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20 active:bg-accent/30 transition-colors shadow-sm"
+                            title="Add as a new separate line"
+                          >
+                            <span>+</span> New Line
                           </button>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>

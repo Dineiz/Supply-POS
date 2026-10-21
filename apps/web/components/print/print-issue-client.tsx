@@ -53,15 +53,13 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
 
   const heightsMm = els.map((el) => {
     const heightPx = Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height);
-    // heightPx is measured while the ticket still has on-screen padding (@media screen:
-    // 4mm top + 4mm bottom for 80mm paper, 3mm+3mm for 58mm), which is taller than the
-    // @media print padding actually used when this prints (2mm+1mm / 2mm+1mm). That gap
-    // alone already over-estimates by ~5mm, so an 8mm buffer is enough slack for print
-    // rendering/font-hinting variance without padding every ticket with dead paper.
-    const rawMm = Math.ceil((heightPx * 25.4) / 96) + 8;
+    const rawMm = Math.ceil((heightPx * 25.4) / 96);
+    // Use generous proportional buffer to absorb font rasterization, Urdu Nastaliq line-height expansion,
+    // and margin rounding at print DPI. Minimum 20mm or 8% of rawMm + 12mm.
+    const bufferMm = Math.max(20, Math.ceil(rawMm * 0.08) + 12);
+    const totalMm = rawMm + bufferMm;
     // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
-    // Enforce a portrait minimum of widthMm + 10mm.
-    return Math.max(widthMm + 10, rawMm);
+    return Math.max(widthMm + 10, totalMm);
   });
   const heightMm = Math.max(...heightsMm);
 
@@ -69,10 +67,10 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
   css += `  html, body { margin:0!important; padding:0!important; background:transparent!important; }\n`;
   css += `  .no-print { display:none!important; }\n`;
   css += `  .receipt-preview { padding:0!important; margin:0!important; background:transparent!important; }\n`;
-  css += `  .receipt { box-shadow:none!important; border:none!important; break-inside:avoid!important; page-break-inside:avoid!important; }\n`;
+  css += `  .receipt { box-shadow:none!important; border:none!important; }\n`;
 
-  // size: <width> <height> — width first, height second.
-  // Because heightMm > widthMm, Chrome treats this as portrait.
+  // Inject BOTH global @page (for print drivers that ignore named pages) and @page ticket
+  css += `  @page { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
   css += `  @page ticket { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
 
   els.forEach((el, i) => {
@@ -83,8 +81,6 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number) {
       css += `    break-before: page;\n`;
       css += `    page-break-before: always;\n`;
     }
-    css += `    break-inside: avoid;\n`;
-    css += `    page-break-inside: avoid;\n`;
     css += `  }\n`;
   });
 
@@ -162,7 +158,7 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
     requestAnimationFrame(() => {
       injectTicketStyles(els, widthMm);
       requestAnimationFrame(() => {
-        setTimeout(() => window.print(), 150);
+        setTimeout(() => window.print(), 250);
       });
     });
   }
@@ -236,10 +232,13 @@ export function PrintIssueClient({ issueId }: { issueId: string }) {
         </p>
         <button
           onClick={() => triggerPrint(data)}
-          className="rounded bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
+          className="rounded bg-accent px-4 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
         >
           🖨 Print Again
         </button>
+        <p className="mt-2 text-[11px] text-ink-faint">
+          Thermal tip: Set Paper size to continuous/roll in print settings to prevent auto-cutting long bills.
+        </p>
       </div>
 
       {/* ── ticket pages ── */}

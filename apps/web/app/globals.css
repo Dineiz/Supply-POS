@@ -533,8 +533,6 @@ body {
   .receipt {
     box-shadow: none !important;
     border: none !important;
-    page-break-inside: avoid;
-    break-inside: avoid;
   }
 
   /* print widths — these are fallbacks; JS also sets html width */
@@ -547,6 +545,39 @@ body {
     width: 72mm;
     margin: 0 auto;
     padding: 2mm 2mm 1mm 2mm;
+  }
+
+  /* Compact margins & individual section-level page-break avoidance so long bills don't split */
+  .receipt .receipt-line-item {
+    margin-bottom: 0.8mm !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .receipt .receipt-item-title-row {
+    margin-bottom: 0.2mm !important;
+  }
+  .receipt .rule-heavy {
+    margin: 1mm 0 !important;
+  }
+  .receipt .rule-light {
+    margin: 0.8mm 0 !important;
+  }
+  .receipt .receipt-section {
+    margin-bottom: 0.8mm !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .receipt .receipt-header {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .receipt .receipt-signatures-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  .receipt .receipt-footer {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }
 
