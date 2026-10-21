@@ -20,9 +20,13 @@ interface CounterState {
   clearCart: () => void;
 }
 
-/** Avoids floating-point drift (0.1 + 0.2 = 0.30000000000000004) after repeated +/- taps. */
-function round(qty: number): number {
-  return Math.round(qty * 100) / 100;
+/** Avoids floating-point drift (0.1 + 0.2 = 0.30000000000000004) while preserving up to 4 decimal places (e.g. 2.375 kg). */
+function roundQty(qty: number): number {
+  return Math.round(qty * 10000) / 10000;
+}
+
+function roundMoney(price: number): number {
+  return Math.round(price * 100) / 100;
 }
 
 export const useCounterStore = create<CounterState>((set, get) => ({
@@ -62,12 +66,12 @@ export const useCounterStore = create<CounterState>((set, get) => ({
   },
   incrementLine: (itemId) =>
     set({
-      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: round(l.qty + l.step) } : l)),
+      lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(l.qty + l.step) } : l)),
     }),
   decrementLine: (itemId) => {
     const line = get().lines.find((l) => l.itemId === itemId);
     if (!line) return;
-    const next = round(line.qty - line.step);
+    const next = roundQty(line.qty - line.step);
     if (next <= 0) {
       get().removeLine(itemId);
       return;
@@ -81,11 +85,11 @@ export const useCounterStore = create<CounterState>((set, get) => ({
       get().removeLine(itemId);
       return;
     }
-    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: round(qty) } : l)) });
+    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, qty: roundQty(qty) } : l)) });
   },
   setLineUnitPrice: (itemId, unitPrice) => {
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
-    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, unitPrice: round(unitPrice) } : l)) });
+    set({ lines: get().lines.map((l) => (l.itemId === itemId ? { ...l, unitPrice: roundMoney(unitPrice) } : l)) });
   },
   removeLine: (itemId) => set({ lines: get().lines.filter((l) => l.itemId !== itemId) }),
   clearCart: () => set({ lines: [], customerId: null }),

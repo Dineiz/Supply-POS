@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authFetch, ApiError } from "@/lib/api";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatQtyOnly } from "@/lib/format";
 import type { FlaggedLine, Item, Supplier } from "@/lib/types";
 
 export function QuickAddStockModal({
@@ -158,7 +158,7 @@ export function QuickAddStockModal({
         )}
         {qtyInSellUnit > 0 && !isBarcodeScan && (
           <p className="font-tabular rounded-md bg-surface px-3 py-2 text-sm text-ink-muted">
-            = {qtyInSellUnit} {item.sellUnit.code.toLowerCase()} @ {formatMoney(costPerSellUnit)}/
+            = {formatQtyOnly(qtyInSellUnit)} {item.sellUnit.code.toLowerCase()} @ {formatMoney(costPerSellUnit)}/
             {item.sellUnit.code.toLowerCase()}
           </p>
         )}

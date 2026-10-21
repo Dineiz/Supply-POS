@@ -57,7 +57,7 @@ export function QtyStepper({
           autoFocus
           type="number"
           inputMode="decimal"
-          step="0.01"
+          step="any"
           min="0"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -68,7 +68,7 @@ export function QtyStepper({
             if (e.key === "Escape") setEditing(false);
           }}
           className={`font-tabular rounded border border-border-strong bg-paper text-center text-ink outline-none ${
-            compact ? "w-11 text-xs" : "w-14 text-sm"
+            compact ? "w-16 text-xs" : "w-20 text-sm"
           }`}
         />
       ) : (

@@ -42,16 +42,18 @@ export function formatUnitCode(unitCode?: string | null): string {
   return unitCode.toLowerCase();
 }
 
-export function formatQty(value: number | string, unitCode: string): string {
-  const num = Number(value);
-  const formatted = Number.isInteger(num) ? String(num) : num.toFixed(2);
-  return `${formatted} ${formatUnitCode(unitCode)}`;
-}
-
-/** Bare quantity, no unit — for print columns that already label the unit elsewhere. */
+/** Bare quantity, no unit — supports up to 4 decimal places (matches database precision) without trailing zeroes (e.g. 2.375 -> "2.375", 2 -> "2"). */
 export function formatQtyOnly(value: number | string): string {
   const num = Number(value);
-  return Number.isInteger(num) ? String(num) : num.toFixed(2);
+  if (!Number.isFinite(num)) return "0";
+  if (Number.isInteger(num)) return String(num);
+  return parseFloat(num.toFixed(4)).toString();
+}
+
+export function formatQty(value: number | string, unitCode: string): string {
+  const formatted = formatQtyOnly(value);
+  const unit = formatUnitCode(unitCode);
+  return unit ? `${formatted} ${unit}` : formatted;
 }
 
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {
