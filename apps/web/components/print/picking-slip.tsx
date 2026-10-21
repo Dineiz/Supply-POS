@@ -50,12 +50,7 @@ export function PickingSlip({
         <div className="line-cols">
           <span className="kot-meta-label">Customer:</span>
           <span className="bold" style={{ textAlign: "right" }}>
-            <span>{customer.name.toUpperCase()}</span>
-            {customer.nameUrdu && (
-              <span className="font-urdu" dir="rtl" style={{ marginLeft: "4px" }}>
-                ({customer.nameUrdu})
-              </span>
-            )}
+            {customer.name.toUpperCase()} {customer.nameUrdu ? `(${customer.nameUrdu})` : ""}
           </span>
         </div>
         {customer.code && (
@@ -125,10 +120,8 @@ export function PickingSlip({
                 )}
                 {line.notes && <p className="kot-line-notes">* {line.notes}</p>}
                 {returnedQty > 0 && (
-                  <p style={{ fontSize: "9.5px", color: "#000", fontWeight: "bold", margin: "0.5mm 0" }}>
-                    {isFullyReturned
-                      ? `[RETURNED FULL: −${formatQtyOnly(returnedQty)} ${formatUnitCode(line.unitCode)}]`
-                      : `[RETURNED: −${formatQtyOnly(returnedQty)} ${formatUnitCode(line.unitCode)} | Orig: ${formatQtyOnly(originalQty)}]`}
+                  <p style={{ fontSize: "9.5px", color: "#666", margin: "0.5mm 0" }}>
+                    * Returned: {formatQtyOnly(returnedQty)} {formatUnitCode(line.unitCode)}
                   </p>
                 )}
               </div>
