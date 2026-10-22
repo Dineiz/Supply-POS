@@ -161,6 +161,12 @@ model Warehouse {
   // Paper width for thermal receipts: "80mm" (standard POS printer) or "58mm" (portable / compact thermal printer).
   receiptPaperWidth String @default("80mm")
 
+  // Length (mm) of the paper loaded as the thermal printer's default in Windows. A thermal driver
+  // prints on one fixed length and Chrome shrinks anything taller to fit, so the receipt is laid out
+  // to fit one sheet of this length at full size and only splits into numbered slips beyond it.
+  // 297 matches the 80 x 297 mm default the POS launcher asks for.
+  receiptSheetLengthMm Int @default(297)
+
   // When on, the receipt's RATE column shows the per-unit price with its unit
   // suffix (e.g. "340.00/kg") instead of a bare number -- makes the rate
   // unambiguous when QTY is a fractional/sub-1-unit amount (e.g. 0.25 kg).

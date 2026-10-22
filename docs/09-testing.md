@@ -7,6 +7,7 @@ Run from the repo root:
 ```bash
 pnpm install
 pnpm --filter @dineiz-supply/logic test        # vitest — all pure functions
+pnpm --filter @dineiz-supply/web test          # vitest — receipt slip planner
 pnpm typecheck                                  # tsc --noEmit, every package
 pnpm --filter @dineiz-supply/db exec prisma validate
 pnpm --filter @dineiz-supply/db exec prisma generate

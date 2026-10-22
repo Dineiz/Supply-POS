@@ -8,6 +8,7 @@ interface UpdateWarehouseBody {
   periodLockedBefore?: string | null;
   printMultipleTickets?: boolean;
   receiptPaperWidth?: "80mm" | "58mm";
+  receiptSheetLengthMm?: number;
   receiptShowRatePerUnit?: boolean;
 }
 
@@ -19,6 +20,7 @@ const SETTINGS_SELECT = {
   periodLockedBefore: true,
   printMultipleTickets: true,
   receiptPaperWidth: true,
+  receiptSheetLengthMm: true,
   receiptShowRatePerUnit: true,
 } as const;
 
@@ -34,6 +36,7 @@ const LETTERHEAD_SELECT = {
   // to decide the counter screen's button label before an order is placed.
   printMultipleTickets: true,
   receiptPaperWidth: true,
+  receiptSheetLengthMm: true,
   receiptShowRatePerUnit: true,
 } as const;
 
@@ -70,6 +73,13 @@ export default async function warehouseRoutes(app: FastifyInstance) {
         return reply.code(400).send({ message: "receiptPaperWidth must be either '80mm' or '58mm'" });
       }
 
+      if (
+        body.receiptSheetLengthMm !== undefined &&
+        (!Number.isInteger(body.receiptSheetLengthMm) || body.receiptSheetLengthMm < 150 || body.receiptSheetLengthMm > 2000)
+      ) {
+        return reply.code(400).send({ message: "receiptSheetLengthMm must be a whole number between 150 and 2000" });
+      }
+
       const before = await prisma.warehouse.findUniqueOrThrow({
         where: { id: warehouseId },
         select: SETTINGS_SELECT,
@@ -88,6 +98,7 @@ export default async function warehouseRoutes(app: FastifyInstance) {
                 : new Date(body.periodLockedBefore),
           printMultipleTickets: body.printMultipleTickets,
           receiptPaperWidth: body.receiptPaperWidth,
+          receiptSheetLengthMm: body.receiptSheetLengthMm,
           receiptShowRatePerUnit: body.receiptShowRatePerUnit,
         },
         select: SETTINGS_SELECT,

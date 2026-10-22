@@ -408,6 +408,7 @@ function computeIssueLinesWithReturns(
           defaultReturnWindowHours: warehouse.defaultReturnWindowHours,
           printMultipleTickets: warehouse.printMultipleTickets,
           receiptPaperWidth: warehouse.receiptPaperWidth ?? "80mm",
+          receiptSheetLengthMm: warehouse.receiptSheetLengthMm,
           receiptShowRatePerUnit: warehouse.receiptShowRatePerUnit,
         },
         oldestUnpaid: oldest ? { issueNumber: oldest.issueNumber, issuedAt: oldest.issuedAt } : null,

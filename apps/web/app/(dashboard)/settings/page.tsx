@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [periodLockedBefore, setPeriodLockedBefore] = useState("");
   const [printMultipleTickets, setPrintMultipleTickets] = useState(false);
   const [receiptPaperWidth, setReceiptPaperWidth] = useState<"80mm" | "58mm">("80mm");
+  const [receiptSheetLengthMm, setReceiptSheetLengthMm] = useState("297");
   const [receiptShowRatePerUnit, setReceiptShowRatePerUnit] = useState(true);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,6 +35,7 @@ export default function SettingsPage() {
         setPeriodLockedBefore(w.periodLockedBefore ? w.periodLockedBefore.slice(0, 10) : "");
         setPrintMultipleTickets(w.printMultipleTickets);
         setReceiptPaperWidth(w.receiptPaperWidth === "58mm" ? "58mm" : "80mm");
+        setReceiptSheetLengthMm(String(w.receiptSheetLengthMm ?? 297));
         setReceiptShowRatePerUnit(w.receiptShowRatePerUnit);
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load settings."))
@@ -55,6 +57,7 @@ export default function SettingsPage() {
           periodLockedBefore: periodLockedBefore || null,
           printMultipleTickets,
           receiptPaperWidth,
+          receiptSheetLengthMm: Number(receiptSheetLengthMm),
           receiptShowRatePerUnit,
         }),
       });
@@ -184,6 +187,30 @@ export default function SettingsPage() {
             >
               58 mm (Compact)
             </button>
+          </div>
+        </div>
+
+        <div className="flex items-start justify-between gap-4 border-t border-border pt-4">
+          <div>
+            <p className="text-sm font-medium text-ink">Receipt paper length</p>
+            <p className="mt-0.5 text-xs text-ink-muted">
+              The length of the paper set as the receipt printer&apos;s default in Windows (Printer properties →
+              Printing Defaults → Paper Size). A bill that fits this length prints on one slip at full size; a longer
+              bill prints as numbered slips instead of being shrunk. Choose a longer paper size in Windows, and enter
+              the same length here, to keep long bills on one slip.
+            </p>
+          </div>
+          <div className="flex w-28 shrink-0 items-center gap-2">
+            <Input
+              type="number"
+              step="1"
+              min="150"
+              max="2000"
+              value={receiptSheetLengthMm}
+              onChange={(e) => setReceiptSheetLengthMm(e.target.value)}
+              required
+            />
+            <span className="text-xs text-ink-muted">mm</span>
           </div>
         </div>
       </div>
