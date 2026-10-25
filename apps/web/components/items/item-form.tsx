@@ -25,6 +25,7 @@ interface FormState {
   sellUnitId: string;
   purchaseToSellFactor: string;
   baseSellPrice: string;
+  costPrice: string;
   marginFloorPercent: string;
   minStockQty: string;
   maxStockQty: string;
@@ -50,6 +51,7 @@ const EMPTY: FormState = {
   sellUnitId: "",
   purchaseToSellFactor: "1",
   baseSellPrice: "",
+  costPrice: "",
   marginFloorPercent: "",
   minStockQty: "",
   maxStockQty: "",
@@ -111,6 +113,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             sellUnitId: item.sellUnit.id,
             purchaseToSellFactor: isSame ? "1" : item.purchaseToSellFactor,
             baseSellPrice: item.price,
+            costPrice: item.avgCost ? String(Number(item.avgCost)) : "0",
             marginFloorPercent: item.marginFloorPercent ?? "",
             minStockQty: item.minStockQty ?? "",
             maxStockQty: item.maxStockQty ?? "",
@@ -184,10 +187,16 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           form.currentStockQty.trim() !== "" &&
           Number(form.currentStockQty) !== Number(existing.stockQty);
 
+        const costChanged =
+          existing &&
+          form.costPrice.trim() !== "" &&
+          Number(form.costPrice) !== Number(existing.avgCost);
+
         await authFetch(`/items/${itemId}`, {
           method: "PATCH",
           body: JSON.stringify({
             ...basePayload,
+            ...(costChanged ? { avgCostPerUnit: Number(form.costPrice) } : {}),
             ...(stockChanged
               ? {
                   currentStockQty: Number(form.currentStockQty),
@@ -264,6 +273,11 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
     try {
       const item = await authFetch<Item>(`/items/${itemId}`);
       setExisting(item);
+      setForm((f) => ({
+        ...f,
+        currentStockQty: item.stockQty,
+        costPrice: item.avgCost ? String(Number(item.avgCost)) : "0",
+      }));
     } catch {
       // Non-fatal
     }
@@ -288,7 +302,10 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
       : openingTotalQty;
   const sellPriceVal = Number(form.baseSellPrice) || 0;
   const totalStockValue = currentStockVal * sellPriceVal;
-  const avgCostVal = mode === "edit" && existing ? Number(existing.avgCost) : openingCostPerSellUnit;
+  const avgCostVal =
+    mode === "edit"
+      ? Number(form.costPrice !== "" ? form.costPrice : (existing?.avgCost ?? 0)) || 0
+      : openingCostPerSellUnit;
   const totalCostValue = currentStockVal * avgCostVal;
 
   return (
@@ -325,7 +342,7 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
                 <span className="text-sm font-medium text-ink-muted">{existing.unitCode}</span>
               </p>
               <p className="mt-0.5 text-xs text-ink-muted font-tabular">
-                Avg cost: {formatMoney(existing.avgCost)}/{existing.unitCode}
+                Avg cost: {formatMoney(avgCostVal)}/{existing.unitCode}
               </p>
             </div>
 
@@ -470,28 +487,78 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
         )}
       </Section>
 
-      <Section title="Pricing">
-        <Field label={`Selling price (per ${sellUnit?.code.toLowerCase() ?? "unit"})`}>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={form.baseSellPrice}
-            onChange={(e) => set("baseSellPrice", e.target.value)}
-            required
-          />
-        </Field>
+      <Section title="Pricing & Cost">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label={`Selling price (per ${sellUnit?.code.toLowerCase() ?? "unit"})`}>
+            <Input
+              type="number"
+              step="any"
+              min="0"
+              value={form.baseSellPrice}
+              onChange={(e) => set("baseSellPrice", e.target.value)}
+              required
+            />
+          </Field>
+
+          {mode === "edit" && (
+            <Field
+              label={`Cost price (per ${sellUnit?.code.toLowerCase() ?? "unit"})`}
+              hint={
+                hasConversion && purchaseUnit && openingFactor > 1
+                  ? `Average cost per ${sellUnit?.code}. (= ${formatMoney(
+                      avgCostVal * openingFactor
+                    )} per ${purchaseUnit.code})`
+                  : `Average unit cost used to calculate margins and valuation`
+              }
+            >
+              <div className="space-y-1.5">
+                <Input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={form.costPrice}
+                  onChange={(e) => set("costPrice", e.target.value)}
+                  placeholder="0.00"
+                />
+                {existing && Number(form.costPrice) !== Number(existing.avgCost) && (
+                  <div className="flex items-center justify-between text-[11px] text-ink-muted pt-0.5">
+                    <span>
+                      Recorded: <strong className="font-tabular text-ink">{formatMoney(existing.avgCost)}</strong>/{existing.unitCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => set("costPrice", String(Number(existing.avgCost)))}
+                      className="text-accent hover:underline font-medium"
+                    >
+                      Reset ({formatMoney(existing.avgCost)})
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Field>
+          )}
+        </div>
 
         {/* Live Total Stock Value calculation banner */}
         <div className="rounded-lg bg-surface border border-border p-3 text-xs text-ink-muted flex flex-wrap items-center justify-between gap-2 shadow-sm">
-          <span>
-            {mode === "edit" ? "Total stock value at this price:" : "Estimated stock value:"}
-            <span className="font-tabular font-semibold text-ink ml-1.5">
-              {currentStockVal} {sellUnit?.code ?? "units"} × {formatMoney(sellPriceVal)}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>
+              {mode === "edit" ? "Total stock value:" : "Estimated stock value:"}
+              <span className="font-tabular font-semibold text-ink ml-1.5">
+                {currentStockVal} {sellUnit?.code ?? "units"} × {formatMoney(sellPriceVal)} = {formatMoney(totalStockValue)}
+              </span>
             </span>
-          </span>
+            {mode === "edit" && (
+              <span>
+                Total cost basis:{" "}
+                <span className="font-tabular font-semibold text-ink">
+                  {formatMoney(totalCostValue)}
+                </span>
+              </span>
+            )}
+          </div>
           <span className="font-tabular text-sm font-bold text-accent">
-            = {formatMoney(totalStockValue)}
+            Margin: {sellPriceVal > 0 ? (((sellPriceVal - avgCostVal) / sellPriceVal) * 100).toFixed(1) : "0"}%
           </span>
         </div>
 

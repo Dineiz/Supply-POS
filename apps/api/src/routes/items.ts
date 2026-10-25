@@ -357,15 +357,28 @@ export default async function itemRoutes(app: FastifyInstance) {
         newFactor = Number(body.purchaseToSellFactor);
       }
 
+      if (body.avgCostPerUnit !== undefined && body.avgCostPerUnit !== null) {
+        const costNum = Number(body.avgCostPerUnit);
+        if (!Number.isFinite(costNum) || costNum < 0) {
+          return reply.code(400).send({ message: "Cost price must be a non-negative number." });
+        }
+      }
+
       try {
         const updated = await prisma.$transaction(async (tx) => {
           let newStockQty: string | Prisma.Decimal = existing.currentStockQty;
+          const newAvgCost =
+            body.avgCostPerUnit != null && Number.isFinite(Number(body.avgCostPerUnit))
+              ? new Decimal(body.avgCostPerUnit)
+              : null;
+
           if (body.currentStockQty != null && Number.isFinite(Number(body.currentStockQty))) {
             const targetStock = new Decimal(body.currentStockQty);
             const currentStock = new Decimal(existing.currentStockQty);
             if (!targetStock.equals(currentStock)) {
               newStockQty = targetStock.toFixed(4);
               const variance = targetStock.minus(currentStock);
+              const costToUse = newAvgCost ?? new Decimal(existing.avgCostPerUnit);
               await tx.stockMovement.create({
                 data: {
                   warehouseId,
@@ -374,10 +387,10 @@ export default async function itemRoutes(app: FastifyInstance) {
                   qty: variance.toFixed(4),
                   qtyBefore: currentStock.toFixed(4),
                   qtyAfter: targetStock.toFixed(4),
-                  unitCost: existing.avgCostPerUnit,
-                  totalCost: variance.abs().times(existing.avgCostPerUnit).toFixed(2),
+                  unitCost: costToUse.toFixed(4),
+                  totalCost: variance.abs().times(costToUse).toFixed(2),
                   avgCostBefore: existing.avgCostPerUnit,
-                  avgCostAfter: existing.avgCostPerUnit,
+                  avgCostAfter: costToUse.toFixed(4),
                   performedById: request.user.sub,
                   performedByName: request.user.name,
                   reason: body.stockAdjustmentReason || "Manual stock correction from item edit",
@@ -409,7 +422,7 @@ export default async function itemRoutes(app: FastifyInstance) {
               isActive: body.isActive,
               purchaseToSellFactor: newFactor,
               currentStockQty: newStockQty,
-              avgCostPerUnit: body.avgCostPerUnit != null ? new Decimal(body.avgCostPerUnit).toFixed(4) : undefined,
+              avgCostPerUnit: newAvgCost != null ? newAvgCost.toFixed(4) : undefined,
             },
             select: ITEM_LIST_SELECT,
           });
