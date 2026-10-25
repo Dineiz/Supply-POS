@@ -36,6 +36,8 @@ interface FormState {
   openingQtyPurchaseUnit: string;
   openingExtraQty: string;
   openingUnitCost: string;
+  currentStockQty: string;
+  stockAdjustmentReason: string;
 }
 
 const EMPTY: FormState = {
@@ -59,6 +61,8 @@ const EMPTY: FormState = {
   openingQtyPurchaseUnit: "",
   openingExtraQty: "",
   openingUnitCost: "",
+  currentStockQty: "",
+  stockAdjustmentReason: "",
 };
 
 export function ItemForm({ mode, itemId }: ItemFormProps) {
@@ -118,6 +122,8 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             openingQtyPurchaseUnit: "",
             openingExtraQty: "",
             openingUnitCost: "",
+            currentStockQty: item.stockQty,
+            stockAdjustmentReason: "",
           });
         } else if (mode === "create" && unitsRes.length > 0) {
           set("purchaseUnitId", unitsRes[0]!.id);
@@ -173,7 +179,24 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           }),
         });
       } else {
-        await authFetch(`/items/${itemId}`, { method: "PATCH", body: JSON.stringify(basePayload) });
+        const stockChanged =
+          existing &&
+          form.currentStockQty.trim() !== "" &&
+          Number(form.currentStockQty) !== Number(existing.stockQty);
+
+        await authFetch(`/items/${itemId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...basePayload,
+            ...(stockChanged
+              ? {
+                  currentStockQty: Number(form.currentStockQty),
+                  stockAdjustmentReason:
+                    form.stockAdjustmentReason.trim() || "Stock updated directly from item edit",
+                }
+              : {}),
+          }),
+        });
       }
       router.push("/items");
     } catch (err) {
@@ -259,34 +282,73 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
   const openingUnitCostNum = Number(form.openingUnitCost) || 0;
   const openingCostPerSellUnit = openingFactor > 0 ? openingUnitCostNum / openingFactor : openingUnitCostNum;
 
+  const currentStockVal =
+    mode === "edit"
+      ? Number(form.currentStockQty !== "" ? form.currentStockQty : (existing?.stockQty ?? 0)) || 0
+      : openingTotalQty;
+  const sellPriceVal = Number(form.baseSellPrice) || 0;
+  const totalStockValue = currentStockVal * sellPriceVal;
+  const avgCostVal = mode === "edit" && existing ? Number(existing.avgCost) : openingCostPerSellUnit;
+  const totalCostValue = currentStockVal * avgCostVal;
+
   return (
     <>
     <form onSubmit={handleSubmit} className="mx-auto max-w-2xl space-y-8 p-6 pb-16">
       <div>
-        <h1 className="text-xl font-semibold text-ink">{mode === "create" ? "New item" : existing?.name}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-ink">{mode === "create" ? "New item" : existing?.name}</h1>
+            {existing?.nameUrdu && (
+              <p className="text-sm font-urdu font-semibold text-accent">{existing.nameUrdu}</p>
+            )}
+          </div>
+          {mode === "edit" && existing && (
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-9 px-3 text-xs"
+                onClick={() => setShowAddStock(true)}
+              >
+                + Receive stock via GRN
+              </Button>
+            </div>
+          )}
+        </div>
+
         {mode === "edit" && existing && (
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <p className="font-tabular text-sm text-ink-muted">
-              Current stock: <strong>{existing.stockQty} {existing.unitCode.toLowerCase()}</strong> · Avg cost:{" "}
-              {formatMoney(existing.avgCost)}/{existing.unitCode.toLowerCase()}
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowAddStock(true)}
-              className="text-sm font-medium text-accent hover:underline"
-            >
-              + Add stock
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTargetStock(existing.stockQty);
-                setShowAdjustStock(true);
-              }}
-              className="text-sm font-medium text-ink-muted hover:text-ink hover:underline"
-            >
-              Adjust stock
-            </button>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-xl border border-border bg-surface p-4">
+            <div className="rounded-lg bg-paper p-3 border border-border/70 shadow-sm">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">Stock on Hand</span>
+              <p className="mt-1 font-tabular text-xl font-bold text-ink">
+                {currentStockVal}{" "}
+                <span className="text-sm font-medium text-ink-muted">{existing.unitCode}</span>
+              </p>
+              <p className="mt-0.5 text-xs text-ink-muted font-tabular">
+                Avg cost: {formatMoney(existing.avgCost)}/{existing.unitCode}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-paper p-3 border border-border/70 shadow-sm">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">Selling Price</span>
+              <p className="mt-1 font-tabular text-xl font-bold text-ink">
+                {formatMoney(sellPriceVal)}{" "}
+                <span className="text-sm font-medium text-ink-muted">/ {existing.unitCode}</span>
+              </p>
+              <p className="mt-0.5 text-xs text-ink-muted font-tabular">
+                Margin: {sellPriceVal > 0 ? (((sellPriceVal - avgCostVal) / sellPriceVal) * 100).toFixed(1) : "0"}%
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-accent/5 p-3 border border-accent/30 shadow-sm">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Total Stock Value</span>
+              <p className="mt-1 font-tabular text-2xl font-black text-ink">
+                {formatMoney(totalStockValue)}
+              </p>
+              <p className="mt-0.5 text-xs text-ink-muted font-tabular">
+                {currentStockVal} {existing.unitCode} × {formatMoney(sellPriceVal)}
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -419,6 +481,20 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
             required
           />
         </Field>
+
+        {/* Live Total Stock Value calculation banner */}
+        <div className="rounded-lg bg-surface border border-border p-3 text-xs text-ink-muted flex flex-wrap items-center justify-between gap-2 shadow-sm">
+          <span>
+            {mode === "edit" ? "Total stock value at this price:" : "Estimated stock value:"}
+            <span className="font-tabular font-semibold text-ink ml-1.5">
+              {currentStockVal} {sellUnit?.code ?? "units"} × {formatMoney(sellPriceVal)}
+            </span>
+          </span>
+          <span className="font-tabular text-sm font-bold text-accent">
+            = {formatMoney(totalStockValue)}
+          </span>
+        </div>
+
         <Field label="Minimum profit %" optional hint="Warn me if I'm making less profit than this on a sale">
           <Input
             type="number"
@@ -429,6 +505,132 @@ export function ItemForm({ mode, itemId }: ItemFormProps) {
           />
         </Field>
       </Section>
+
+      {mode === "edit" && existing && (
+        <Section
+          title="Stock on hand & direct adjustment"
+          hint={`Directly change the stock for ${existing.name}. Click quick-add buttons or type the new number. A stock movement record will be logged automatically.`}
+        >
+          <div className="rounded-xl border border-border bg-surface p-4 space-y-4 shadow-sm">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label={`Current Stock Quantity (${sellUnit?.code ?? existing.unitCode})`}
+                hint="Directly edit this quantity to increase or decrease stock"
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={form.currentStockQty}
+                    onChange={(e) => set("currentStockQty", e.target.value)}
+                    className="font-tabular font-bold text-base"
+                    required
+                  />
+                  <span className="text-sm font-semibold text-ink-muted">
+                    {sellUnit?.code ?? existing.unitCode}
+                  </span>
+                </div>
+              </Field>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-ink-muted">
+                  Quick Add to Stock
+                </label>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[1, 2, 5, 10, 20, 50, 100].map((delta) => (
+                    <button
+                      key={delta}
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(form.currentStockQty !== "" ? form.currentStockQty : existing.stockQty) || 0;
+                        const nextVal = String(Number((cur + delta).toFixed(3)));
+                        set("currentStockQty", nextVal);
+                        if (!form.stockAdjustmentReason) {
+                          set("stockAdjustmentReason", `Added +${delta} ${sellUnit?.code ?? existing.unitCode}`);
+                        }
+                      }}
+                      className="rounded-md border border-border bg-paper px-2.5 py-1 text-xs font-semibold text-ink hover:border-accent hover:bg-accent/5 hover:text-accent active:scale-95 transition-all shadow-sm"
+                    >
+                      +{delta}
+                    </button>
+                  ))}
+                  {Number(form.currentStockQty) !== Number(existing.stockQty) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        set("currentStockQty", existing.stockQty);
+                        set("stockAdjustmentReason", "");
+                      }}
+                      className="rounded-md border border-border bg-paper px-2.5 py-1 text-xs font-medium text-ink-muted hover:text-danger hover:border-danger/30 transition-all shadow-sm"
+                    >
+                      Reset ({existing.stockQty})
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] text-ink-faint">
+                  Click to add directly to current stock (e.g. +10 adds 10 to current stock)
+                </p>
+              </div>
+            </div>
+
+            {/* Difference & Calculation card */}
+            <div className="rounded-lg bg-paper p-3.5 border border-border/80 shadow-sm space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div>
+                  <span className="text-ink-muted">Previous recorded: </span>
+                  <span className="font-tabular font-semibold text-ink">
+                    {existing.stockQty} {sellUnit?.code ?? existing.unitCode}
+                  </span>
+                  {Number(form.currentStockQty) !== Number(existing.stockQty) && (
+                    <>
+                      <span className="mx-2 text-ink-muted">➔</span>
+                      <span className="text-ink-muted">New: </span>
+                      <span className="font-tabular font-bold text-ink">
+                        {currentStockVal} {sellUnit?.code ?? existing.unitCode}
+                      </span>
+                      <span
+                        className={`ml-2 rounded px-1.5 py-0.5 font-tabular font-bold text-[11px] ${
+                          currentStockVal >= Number(existing.stockQty)
+                            ? "bg-success-surface text-success"
+                            : "bg-warning-surface text-warning"
+                        }`}
+                      >
+                        {currentStockVal >= Number(existing.stockQty) ? "+" : ""}
+                        {(currentStockVal - Number(existing.stockQty)).toFixed(2)} {sellUnit?.code ?? existing.unitCode}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Total Stock Value */}
+              <div className="flex flex-wrap items-baseline justify-between gap-2 pt-2 border-t border-border/60">
+                <span className="text-xs font-medium text-ink-muted">
+                  Total Stock Value ({currentStockVal} {sellUnit?.code ?? existing.unitCode} × {formatMoney(sellPriceVal)}):
+                </span>
+                <span className="font-tabular text-lg font-bold text-accent">
+                  {formatMoney(totalStockValue)}
+                </span>
+              </div>
+            </div>
+
+            {Number(form.currentStockQty) !== Number(existing.stockQty) && (
+              <Field
+                label="Reason for stock adjustment"
+                optional
+                hint="Why is the stock being updated? (e.g. Physical inventory recount, direct stock addition, damage write-off)"
+              >
+                <Input
+                  value={form.stockAdjustmentReason}
+                  onChange={(e) => set("stockAdjustmentReason", e.target.value)}
+                  placeholder="e.g. Direct stock addition / physical inventory recount"
+                />
+              </Field>
+            )}
+          </div>
+        </Section>
+      )}
 
       {mode === "create" && (
         <Section
