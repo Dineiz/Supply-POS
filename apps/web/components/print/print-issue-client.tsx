@@ -159,19 +159,24 @@ function injectTicketStyles(els: HTMLElement[], widthMm: number, sheetMm: number
   const tallestMm = asPrinted(root, () => Math.max(...els.map((el) => pxToMm(heightOf(receiptOf(el))))));
   // CRITICAL: height must always be > width or Chrome rotates the page to landscape.
   // Never taller than the paper: Chrome would shrink the whole page to fit it.
-  const heightMm = Math.min(sheetMm, Math.max(widthMm + 10, Math.ceil(tallestMm) + 2));
+  // Use +5mm buffer (was +2mm) to absorb sub-pixel rounding, font-hinting differences and
+  // the 1px bottom border of .receipt-stamp that Chrome sometimes adds.
+  const heightMm = Math.min(sheetMm, Math.max(widthMm + 10, Math.ceil(tallestMm) + 5));
 
   let css = `@media print {\n`;
   css += `  html, body { margin:0!important; padding:0!important; background:transparent!important; }\n`;
   css += `  .no-print { display:none!important; }\n`;
-  css += `  .receipt-preview { padding:0!important; margin:0!important; background:transparent!important; }\n`;
-  css += `  .receipt { box-shadow:none!important; border:none!important; }\n`;
+  css += `  .receipt-preview { padding:0!important; margin:0!important; background:transparent!important; overflow:visible!important; }\n`;
+  css += `  .receipt { box-shadow:none!important; border:none!important; overflow:hidden!important; break-inside:avoid!important; page-break-inside:avoid!important; }\n`;
   // A ticket taller than the paper (e.g. a long warehouse slip) flows onto the next sheet at full size.
   css += `  @page ticket { size:${widthMm}mm ${heightMm}mm; margin:0; }\n`;
 
   els.forEach((el, i) => {
     css += `  .print-ticket-${i} {\n`;
     css += `    page: ticket;\n`;
+    css += `    overflow: hidden;\n`;
+    css += `    break-inside: avoid;\n`;
+    css += `    page-break-inside: avoid;\n`;
     if (i > 0) {
       // force a new physical page (= printer cut) before every ticket except the first
       css += `    break-before: page;\n`;

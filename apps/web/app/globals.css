@@ -631,10 +631,10 @@ body {
 
 @media print {
   /* @page named sizes (tkt0, tkt1 …) are injected dynamically by JS.
-     This default @page is the fallback — always portrait. */
+     This default @page is the fallback — always portrait, narrow width. */
   @page {
     margin: 0;
-    /* 'portrait' keyword as additional safety: overrides any driver landscape default */
+    size: 80mm 297mm portrait;
   }
 
   html,
@@ -664,11 +664,17 @@ body {
     width: 48mm;
     margin: 0 auto;
     padding: 2mm 1.5mm 1mm 1.5mm;
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .receipt.paper-80mm {
     width: 72mm;
     margin: 0 auto;
     padding: 2mm 2mm 1mm 2mm;
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 
