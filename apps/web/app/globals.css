@@ -630,11 +630,8 @@ body {
 .print-metrics .receipt.paper-58mm { padding: 2mm 1.5mm 1mm 1.5mm; }
 
 @media print {
-  /* @page named sizes (tkt0, tkt1 …) are injected dynamically by JS.
-     This default @page is the fallback — always portrait, narrow width. */
   @page {
     margin: 0;
-    size: 80mm 297mm portrait;
   }
 
   html,
@@ -652,11 +649,15 @@ body {
     padding: 0 !important;
     margin: 0 !important;
     background: transparent !important;
+    overflow: visible !important;
   }
 
   .receipt {
     box-shadow: none !important;
     border: none !important;
+    overflow: visible !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   /* print widths — these are fallbacks; JS also sets html width */
@@ -664,7 +665,7 @@ body {
     width: 48mm;
     margin: 0 auto;
     padding: 2mm 1.5mm 1mm 1.5mm;
-    overflow: hidden;
+    overflow: visible;
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -672,7 +673,7 @@ body {
     width: 72mm;
     margin: 0 auto;
     padding: 2mm 2mm 1mm 2mm;
-    overflow: hidden;
+    overflow: visible;
     break-inside: avoid;
     page-break-inside: avoid;
   }
